@@ -20,12 +20,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY_HERE",
-  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID",
+  apiKey: "AIzaSyDa0lV6TXBjlBJ4T7qLL8sGufdUUkpr8fo",
+  authDomain: "ssh-command-center.firebaseapp.com",
+  projectId: "ssh-command-center",
+  storageBucket: "ssh-command-center.firebasestorage.app",
+  messagingSenderId: "403183367598",
+  appId: "1:403183367598:web:068e561f9ccee00d2cc43f",
+  measurementId: "G-6VQN1TYYRK",
 };
 
 // Everything below decides whether the config above is "real" yet.
