@@ -1,0 +1,6 @@
+# Local test tooling only — the app itself is a dependency-free static site.
+node_modules/
+package.json
+package-lock.json
+.DS_Store
+*.log
