@@ -1376,7 +1376,7 @@ async function boot() {
   $("#scrim")?.addEventListener("click", closeSidebar);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); closeSidebar(); } });
 
-  await DB.init();
+  await DB.init(COLLECTIONS);
   // Subscribe to everything; each fires immediately from cache.
   for (const col of COLLECTIONS) DB.subscribe(col, (list) => { state[col] = list; onDataChanged(); });
   await seedIfEmpty();

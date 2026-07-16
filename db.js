@@ -21,6 +21,7 @@ const subscribers = new Map();
 let mode = "local"; // "local" | "firestore"
 let fs = null; // firestore module bindings once loaded
 let dbHandle = null;
+let COLS = []; // collection names, provided by init()
 
 function lsKey(col) {
   return LS_PREFIX + col;
@@ -73,6 +74,42 @@ function sortByOrderThenCreated(a, b) {
   return (a.createdAt ?? 0) - (b.createdAt ?? 0);
 }
 
+// One-time, non-destructive merge of this device's local data into Firestore,
+// and hydrate the in-memory cache from the merged result. Runs once at startup
+// (from init) before any onSnapshot listener, which is what prevents an empty
+// remote from clobbering local data.
+async function reconcileAll() {
+  for (const col of COLS) {
+    try {
+      const colRef = fs.collection(dbHandle, col);
+      const snap = await fs.getDocs(colRef);
+      const merged = new Map();
+      snap.forEach((d) => merged.set(d.id, { id: d.id, ...d.data() }));
+
+      // Push up any record that exists locally but not yet remotely.
+      const localItems = readLocal(col);
+      for (const item of localItems) {
+        if (item && item.id != null && !merged.has(item.id)) {
+          const { id, ...rest } = item;
+          try {
+            await fs.setDoc(fs.doc(dbHandle, col, id), rest, { merge: true });
+          } catch (e) {
+            console.warn("reconcile upload failed", col, id, e);
+          }
+          merged.set(item.id, item);
+        }
+      }
+
+      cache.set(col, merged);
+      writeLocal(col, Array.from(merged.values()));
+    } catch (e) {
+      console.warn("reconcile failed for", col, "— keeping local data", e);
+      // On failure, keep whatever is already cached/local (never wipe).
+      ensureCache(col);
+    }
+  }
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export const DB = {
@@ -81,7 +118,8 @@ export const DB = {
   },
 
   /** Try to bring up Firestore. Falls back to local silently on any failure. */
-  async init() {
+  async init(collections = []) {
+    COLS = collections;
     if (!isFirebaseConfigured()) {
       mode = "local";
       return mode;
@@ -97,6 +135,11 @@ export const DB = {
       dbHandle = store.getFirestore(app);
       fs = store;
       mode = "firestore";
+      // CRITICAL: reconcile BEFORE any live listener attaches. This uploads any
+      // local-only records into Firestore so a fresh/empty database can never
+      // wipe existing local data. It's a non-destructive union (nothing is
+      // deleted), so it's safe to run on every startup.
+      await reconcileAll();
       return mode;
     } catch (e) {
       console.warn("Firebase init failed — staying on local storage.", e);

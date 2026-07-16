@@ -69,14 +69,11 @@ function blankProperty(order) {
 }
 
 export async function seedIfEmpty() {
-  const alreadySeeded = localStorage.getItem("sshcc:seeded");
-  if (alreadySeeded) return;
-
-  // Only seed if there is genuinely no data anywhere yet.
-  const anyData = ["properties", "tasks", "routines", "content"].some((c) =>
-    DB.hasAny(c)
-  );
-  if (anyData) {
+  // Seed only when there is genuinely no portfolio yet. This covers both the
+  // very first run AND recovery when the database comes up empty. DB.init has
+  // already reconciled with Firestore by this point, so `hasAny` reflects the
+  // real remote+local state — we won't seed on top of existing data.
+  if (DB.hasAny("properties")) {
     localStorage.setItem("sshcc:seeded", "1");
     return;
   }
