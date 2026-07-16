@@ -138,8 +138,12 @@ export const DB = {
       // CRITICAL: reconcile BEFORE any live listener attaches. This uploads any
       // local-only records into Firestore so a fresh/empty database can never
       // wipe existing local data. It's a non-destructive union (nothing is
-      // deleted), so it's safe to run on every startup.
-      await reconcileAll();
+      // deleted), so it's safe to run on every startup. Time-boxed so a stalled
+      // network can never freeze app startup.
+      await Promise.race([
+        reconcileAll(),
+        new Promise((resolve) => setTimeout(resolve, 8000)),
+      ]);
       return mode;
     } catch (e) {
       console.warn("Firebase init failed — staying on local storage.", e);

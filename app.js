@@ -1345,14 +1345,30 @@ async function importBackup(file) {
 //  RENDER LOOP
 // ─────────────────────────────────────────────────────────────────────────────
 function render() {
-  renderNav();
-  const view = VIEWS[currentView] || VIEWS.today;
+  try { renderNav(); } catch (e) { console.error("nav render failed", e); }
   const host = $("#view");
-  host.innerHTML = view.render();
-  view.mount?.(host);
-  const dot = $("#syncDot"), label = $("#syncLabel");
-  if (DB.mode === "firestore") { dot.className = "sync-dot live"; label.textContent = "Synced"; }
-  else { dot.className = "sync-dot local"; label.textContent = "Local only"; }
+  if (!host) return;
+  try {
+    const view = VIEWS[currentView] || VIEWS.today;
+    host.innerHTML = view.render();
+    view.mount?.(host);
+  } catch (e) {
+    // A single broken view must never blank the whole app.
+    console.error("view render failed:", currentView, e);
+    host.innerHTML = `<div class="view"><div class="empty">
+      Couldn't draw the “${esc(currentView)}” screen.<br><br>
+      <button class="btn" data-nav-fallback="today">Go to Today</button>
+      <button class="btn ghost" onclick="location.reload()">Reload</button>
+    </div></div>`;
+    host.querySelector("[data-nav-fallback]")?.addEventListener("click", () => go("today"));
+  }
+  try {
+    const dot = $("#syncDot"), label = $("#syncLabel");
+    if (dot && label) {
+      if (DB.mode === "firestore") { dot.className = "sync-dot live"; label.textContent = "Synced"; }
+      else { dot.className = "sync-dot local"; label.textContent = "Local only"; }
+    }
+  } catch {}
 }
 
 let raf = null;
@@ -1371,17 +1387,33 @@ function openSidebar() { $("#sidebar").classList.add("open"); $("#scrim").classL
 function closeSidebar() { $("#sidebar").classList.remove("open"); $("#scrim").classList.remove("show"); }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
+function hydrateFromCache() {
+  for (const col of COLLECTIONS) { try { state[col] = DB.getAll(col); } catch { state[col] = []; } }
+}
+
 async function boot() {
   $("#menuBtn")?.addEventListener("click", openSidebar);
   $("#scrim")?.addEventListener("click", closeSidebar);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); closeSidebar(); } });
 
-  await DB.init(COLLECTIONS);
-  // Subscribe to everything; each fires immediately from cache.
-  for (const col of COLLECTIONS) DB.subscribe(col, (list) => { state[col] = list; onDataChanged(); });
-  await seedIfEmpty();
+  // 1) Instant first paint from local cache. The screen is visible immediately,
+  //    even before (or entirely without) Firebase — so it can never be blank.
+  hydrateFromCache();
+  render();
 
+  // 2) Bring Firebase up in the background. init() has its own timeout, and a
+  //    failure just means we stay on local storage — the UI is already showing.
+  try { await DB.init(COLLECTIONS); } catch (e) { console.warn("Firebase init failed — local only.", e); }
+
+  // 3) Attach live subscriptions (work in both local and Firestore modes).
+  for (const col of COLLECTIONS) DB.subscribe(col, (list) => { state[col] = list; onDataChanged(); });
+
+  try { await seedIfEmpty(); } catch (e) { console.warn("seed skipped", e); }
   render();
 }
 
-boot();
+boot().catch((e) => {
+  console.error("boot failed", e);
+  // Absolute last resort: make sure something is on screen.
+  try { hydrateFromCache(); render(); } catch (_) {}
+});
