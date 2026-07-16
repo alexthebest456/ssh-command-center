@@ -68,6 +68,9 @@ body {
 
 .brand {
   padding: 20px 20px 16px;
+  /* Clear the phone status bar / notch when installed as a standalone PWA
+     (0 on desktop, where the inset is 0). */
+  padding-top: calc(20px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--line);
 }
 .brand .mark {
@@ -480,9 +483,18 @@ label.field .lab {
   #sidebar.open { transform: translateX(0); }
   .mobile-top {
     display: flex; align-items: center; gap: 12px;
-    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    /* Pad the bar's content below the status bar / notch, and in from side
+       notches, so the ☰ menu button is always tappable. */
+    padding: 12px 16px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    padding-left: calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right));
+    border-bottom: 1px solid var(--line);
     position: sticky; top: 0; background: var(--navy-900); z-index: 20;
   }
+  /* Keep content clear of the home-indicator area at the bottom too. */
+  .view { padding-bottom: calc(90px + env(safe-area-inset-bottom)); }
+  #sidebar { padding-bottom: env(safe-area-inset-bottom); }
   .mobile-top .mark { font-family: var(--mono); color: var(--amber); font-weight: 700; letter-spacing: 1px; }
   .scrim {
     position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 35; display: none;
