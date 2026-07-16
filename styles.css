@@ -492,6 +492,53 @@ label.field .lab {
   .form-row { grid-template-columns: 1fr; }
 }
 
+/* ── Charts (Productivity) ─────────────────────────────────────────────────── */
+.seg-toggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.seg-toggle button {
+  background: var(--navy-800); color: var(--ink-dim); border: none;
+  padding: 7px 16px; font-size: 12.5px; font-family: var(--sans); cursor: pointer;
+}
+.seg-toggle button + button { border-left: 1px solid var(--line-strong); }
+.seg-toggle button.on { background: var(--amber); color: #1a1200; font-weight: 600; }
+
+.chart-wrap { position: relative; }
+svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .axis, .chart .grid { stroke: var(--line); }
+.chart .grid { stroke-dasharray: 2 4; }
+.chart .ticktext { fill: var(--ink-faint); font-family: var(--mono); font-size: 10px; }
+.chart .vlabel { fill: var(--ink-dim); font-family: var(--mono); font-size: 10px; font-weight: 700; }
+.chart .seg-done { fill: var(--green); }
+.chart .seg-miss { fill: var(--red); }
+.chart .hit { fill: transparent; cursor: pointer; }
+.chart .barg:hover .hit { fill: rgba(120,170,230,0.06); }
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+.legend .li { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-dim); }
+.legend .sw { width: 12px; height: 12px; border-radius: 3px; }
+.legend .sw.done { background: var(--green); }
+.legend .sw.miss { background: var(--red); }
+
+.chart-tip {
+  position: absolute; pointer-events: none; z-index: 10;
+  background: var(--navy-700); border: 1px solid var(--amber-line);
+  border-radius: 7px; padding: 8px 11px; font-family: var(--mono); font-size: 11px;
+  color: var(--ink); opacity: 0; transition: opacity 0.1s; white-space: nowrap;
+  transform: translate(-50%, -100%); box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.chart-tip.show { opacity: 1; }
+.chart-tip .tt-d { color: var(--amber); margin-bottom: 4px; }
+.chart-tip .tt-r { display: flex; justify-content: space-between; gap: 14px; }
+
+/* Field completion bars */
+.fbar-row { display: grid; grid-template-columns: 130px 1fr 92px; align-items: center; gap: 12px; margin-bottom: 10px; }
+.fbar-row .fname { font-size: 13px; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbar-track { height: 18px; background: var(--navy-700); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+.fbar-fill { height: 100%; border-radius: 5px 0 0 5px; background: var(--amber); min-width: 2px; }
+.fbar-fill.high { background: var(--green); }
+.fbar-fill.low { background: var(--red); }
+.fbar-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); text-align: right; }
+@media (max-width: 640px){ .fbar-row { grid-template-columns: 90px 1fr 76px; } }
+
 /* Mobile scrim: hidden (and out of grid flow) on desktop; overlay on mobile. */
 .scrim { display: none; }
 

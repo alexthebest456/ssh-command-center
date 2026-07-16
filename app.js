@@ -122,8 +122,9 @@ const NAV = [
   { id: "backlog", n: "07", label: "Backlog" },
   { id: "scorecard", n: "08", label: "Monthly Scorecard" },
   { id: "weekly", n: "09", label: "Weekly Review" },
-  { id: "routines", n: "10", label: "Daily Routines" },
-  { id: "data", n: "11", label: "Data & Sync" },
+  { id: "productivity", n: "10", label: "Productivity" },
+  { id: "routines", n: "11", label: "Daily Routines" },
+  { id: "data", n: "12", label: "Data & Sync" },
 ];
 
 function badgeFor(id) {
@@ -930,7 +931,226 @@ function editReview(wkId) {
   });
 }
 
-// ── 10 DAILY ROUTINES ────────────────────────────────────────────────────────
+// ── 10 PRODUCTIVITY (charts) ─────────────────────────────────────────────────
+let prodRange = localStorage.getItem("sshcc:prodRange") || "week";
+let prodStatsCache = [];
+
+function scheduledOn(r, iso) {
+  if (r.schedule === "weekdays") { const d = parseISO(iso).getDay(); return d >= 1 && d <= 5; }
+  return true;
+}
+
+function prodDays() {
+  if (prodRange === "week") {
+    const mon = mondayOf(todayDate());
+    return Array.from({ length: 7 }, (_, i) => toISO(new Date(mon.getTime() + i * DAY)));
+  }
+  const first = startOfMonth(todayDate());
+  const n = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return Array.from({ length: n }, (_, i) => toISO(new Date(first.getFullYear(), first.getMonth(), i + 1)));
+}
+
+function dayStats(days) {
+  const nowMs = todayDate().getTime();
+  return days.map((iso) => {
+    const start = parseISO(iso).getTime();
+    const end = start + DAY;
+    const completed = state.tasks.filter((t) => t.doneAt && t.doneAt >= start && t.doneAt < end).length;
+    const isPast = start < nowMs;
+    const missed = state.tasks.filter((t) => t.due === iso && t.status !== "done" && isPast).length;
+    const sched = state.routines.filter((r) => scheduledOn(r, iso));
+    const rDone = sched.filter((r) => routineDone(r.id, iso)).length;
+    return { iso, completed, missed, rSched: sched.length, rDone };
+  });
+}
+
+function fieldStats(days) {
+  const set = new Set(days);
+  const rel = state.tasks.filter((t) => {
+    if (t.due && set.has(t.due)) return true;
+    if (t.doneAt) { const iso = toISO(new Date(t.doneAt)); return set.has(iso); }
+    return false;
+  });
+  const buckets = {};
+  const bump = (name, done) => {
+    const k = name || "untagged";
+    buckets[k] = buckets[k] || { name: k, done: 0, total: 0 };
+    buckets[k].total++; if (done) buckets[k].done++;
+  };
+  rel.forEach((t) => {
+    const done = t.status === "done";
+    const tags = (t.tags || []).filter(Boolean);
+    if (tags.length) tags.forEach((tag) => bump(tag, done));
+    else bump(t.propertyId ? propName(t.propertyId) : "untagged", done);
+  });
+  return Object.values(buckets)
+    .map((b) => ({ ...b, rate: b.total ? Math.round((b.done / b.total) * 100) : 0 }))
+    .sort((a, b) => b.total - a.total || b.rate - a.rate);
+}
+
+function topRoundPath(x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h));
+  return `M${x},${y + h} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h} Z`;
+}
+
+function tasksByDayChart(stats) {
+  const W = 720, H = 230, padL = 26, padR = 10, padT = 20, padB = 26;
+  const n = stats.length;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxV = Math.max(4, ...stats.map((s) => s.completed + s.missed));
+  const step = plotW / n;
+  const bw = Math.min(44, step * 0.6);
+  const base = padT + plotH;
+  const yOf = (v) => base - (v / maxV) * plotH;
+  const isWeek = prodRange === "week";
+
+  // gridlines / y ticks (0, mid, max)
+  const ticks = [0, Math.round(maxV / 2), maxV].filter((v, i, a) => a.indexOf(v) === i);
+  let grid = ticks.map((v) => `<line class="grid" x1="${padL}" y1="${yOf(v)}" x2="${W - padR}" y2="${yOf(v)}"/>
+    <text class="ticktext" x="${padL - 6}" y="${yOf(v) + 3}" text-anchor="end">${v}</text>`).join("");
+
+  const bars = stats.map((s, i) => {
+    const total = s.completed + s.missed;
+    const cx = padL + step * i + step / 2;
+    const x0 = cx - bw / 2;
+    const cH = (s.completed / maxV) * plotH;
+    const mH = (s.missed / maxV) * plotH;
+    let shapes = "";
+    if (s.completed) {
+      const yc = base - cH;
+      shapes += s.missed
+        ? `<rect class="seg-done" x="${x0}" y="${yc}" width="${bw}" height="${cH}"/>`
+        : `<path class="seg-done" d="${topRoundPath(x0, yc, bw, cH, 4)}"/>`;
+    }
+    if (s.missed) {
+      const gap = s.completed ? 2 : 0;
+      const ym = base - cH - gap - mH;
+      shapes += `<path fill="url(#hatch)" d="${topRoundPath(x0, ym, bw, mH, 4)}"/>`;
+    }
+    const label = isWeek && total ? `<text class="vlabel" x="${cx}" y="${base - Math.max(cH + mH, 0) - 6}" text-anchor="middle">${total}</text>` : "";
+    const xlab = isWeek
+      ? fmtDow(s.iso)
+      : ([1, 5, 10, 15, 20, 25, 30].includes(parseISO(s.iso).getDate()) ? String(parseISO(s.iso).getDate()) : "");
+    const tick = xlab ? `<text class="ticktext" x="${cx}" y="${base + 15}" text-anchor="middle">${xlab}</text>` : "";
+    return `<g class="barg" data-i="${i}">${shapes}${label}${tick}
+      <rect class="hit" x="${padL + step * i}" y="${padT}" width="${step}" height="${plotH}"/></g>`;
+  }).join("");
+
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Tasks completed and missed per day">
+    <defs><pattern id="hatch" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="#ff6b6b"/><rect width="4" height="8" fill="#b93a3a"/>
+    </pattern></defs>
+    <line class="axis" x1="${padL}" y1="${base}" x2="${W - padR}" y2="${base}"/>
+    ${grid}${bars}</svg>`;
+}
+
+function routineSparkline(stats) {
+  const W = 720, H = 90, padL = 26, padR = 10, padT = 10, padB = 18;
+  const n = stats.length, plotW = W - padL - padR, plotH = H - padT - padB;
+  const step = plotW / n, base = padT + plotH;
+  const pct = (s) => (s.rSched ? s.rDone / s.rSched : 0);
+  const pts = stats.map((s, i) => [padL + step * i + step / 2, base - pct(s) * plotH]);
+  const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+  const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${base} L${pts[0][0].toFixed(1)},${base} Z`;
+  const dots = prodRange === "week" ? pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(--amber)" stroke="var(--navy-900)" stroke-width="2"/>`).join("") : "";
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Routine adherence per day">
+    <line class="grid" x1="${padL}" y1="${padT}" x2="${W - padR}" y2="${padT}"/>
+    <text class="ticktext" x="${padL - 6}" y="${padT + 3}" text-anchor="end">100%</text>
+    <line class="axis" x1="${padL}" y1="${base}" x2="${W - padR}" y2="${base}"/>
+    <path d="${area}" fill="var(--amber)" fill-opacity="0.1"/>
+    <path d="${line}" fill="none" stroke="var(--amber)" stroke-width="2"/>${dots}</svg>`;
+}
+
+function fmtDow(iso) { return parseISO(iso).toLocaleDateString("en-US", { weekday: "short" }).slice(0, 1); }
+
+VIEWS.productivity = {
+  render() {
+    const days = prodDays();
+    const stats = dayStats(days);
+    prodStatsCache = stats;
+    const completed = stats.reduce((a, s) => a + s.completed, 0);
+    const missed = stats.reduce((a, s) => a + s.missed, 0);
+    const rate = completed + missed ? Math.round((completed / (completed + missed)) * 100) : null;
+    const rTot = stats.reduce((a, s) => a + s.rSched, 0);
+    const rDone = stats.reduce((a, s) => a + s.rDone, 0);
+    const rAdh = rTot ? Math.round((rDone / rTot) * 100) : null;
+    const fields = fieldStats(days);
+    const rangeLabel = prodRange === "week"
+      ? `Week of ${fmtDate(days[0])}`
+      : startOfMonth(todayDate()).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+    return `
+    <div class="view">
+      <div class="view-head">
+        <div><div class="eyebrow">Analytics</div><h1>Productivity</h1></div>
+        <div class="seg-toggle">
+          <button class="${prodRange === "week" ? "on" : ""}" data-range="week">This Week</button>
+          <button class="${prodRange === "month" ? "on" : ""}" data-range="month">This Month</button>
+        </div>
+      </div>
+
+      <div class="grid cols-4 mb">
+        <div class="stat"><div class="k">Completion rate</div><div class="v ${rate >= 80 ? "green" : rate >= 50 ? "amber" : rate === null ? "" : "red"}">${rate === null ? "—" : rate + "%"}</div><div class="sub">done vs missed</div></div>
+        <div class="stat"><div class="k">Completed</div><div class="v green">${completed}</div><div class="sub">tasks · ${rangeLabel}</div></div>
+        <div class="stat"><div class="k">Missed / overdue</div><div class="v ${missed ? "red" : "green"}">${missed}</div><div class="sub">unfinished past due</div></div>
+        <div class="stat"><div class="k">Routine adherence</div><div class="v ${rAdh >= 80 ? "green" : rAdh >= 50 ? "amber" : rAdh === null ? "" : "red"}">${rAdh === null ? "—" : rAdh + "%"}</div><div class="sub">of scheduled</div></div>
+      </div>
+
+      <div class="panel mb chart-wrap">
+        <div class="flex between">
+          <div class="panel-title" style="margin:0"><span class="n">▸</span> Tasks done vs. missed — by day</div>
+          <div class="legend"><span class="li"><span class="sw done"></span>Completed</span><span class="li"><span class="sw miss"></span>Missed / overdue</span></div>
+        </div>
+        <div class="mt">${tasksByDayChart(stats)}</div>
+        <div class="chart-tip" id="chartTip"></div>
+        ${completed + missed === 0 ? `<div class="empty mt">No task activity in this ${prodRange}. Complete or schedule tasks to see your pace here.</div>` : ""}
+      </div>
+
+      <div class="grid cols-2">
+        <div class="panel">
+          <div class="panel-title"><span class="n">▸</span> Productivity by field</div>
+          ${fields.length ? fields.map((f) => {
+            const cls = f.rate >= 80 ? "high" : f.rate < 50 ? "low" : "";
+            return `<div class="fbar-row">
+              <div class="fname" title="${esc(f.name)}">${esc(f.name)}</div>
+              <div class="fbar-track"><div class="fbar-fill ${cls}" style="width:${f.rate}%"></div></div>
+              <div class="fbar-meta">${f.done}/${f.total} · ${f.rate}%</div></div>`;
+          }).join("") : `<div class="empty">No tagged tasks in range. Add tags like “build”, “content”, “ops” to tasks to break productivity down by area.</div>`}
+        </div>
+        <div class="panel chart-wrap">
+          <div class="panel-title"><span class="n">▸</span> Routine adherence — by day</div>
+          ${routineSparkline(stats)}
+          <div class="mono muted mt" style="font-size:11px">${rDone}/${rTot} routine check-ins completed this ${prodRange}.</div>
+        </div>
+      </div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-range]").forEach((el) => el.addEventListener("click", () => {
+      prodRange = el.dataset.range; localStorage.setItem("sshcc:prodRange", prodRange); render();
+    }));
+    // Bar hover tooltip
+    const tip = root.querySelector("#chartTip");
+    const wrap = tip?.closest(".chart-wrap");
+    root.querySelectorAll(".barg").forEach((g) => {
+      g.addEventListener("mousemove", (e) => {
+        const s = prodStatsCache[Number(g.dataset.i)];
+        if (!s || !tip || !wrap) return;
+        const r = wrap.getBoundingClientRect();
+        tip.innerHTML = `<div class="tt-d">${parseISO(s.iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</div>
+          <div class="tt-r"><span style="color:var(--green)">Completed</span><span>${s.completed}</span></div>
+          <div class="tt-r"><span style="color:var(--red)">Missed</span><span>${s.missed}</span></div>
+          <div class="tt-r"><span class="muted">Routines</span><span>${s.rDone}/${s.rSched}</span></div>`;
+        tip.style.left = (e.clientX - r.left) + "px";
+        tip.style.top = (e.clientY - r.top - 12) + "px";
+        tip.classList.add("show");
+      });
+      g.addEventListener("mouseleave", () => tip?.classList.remove("show"));
+    });
+  },
+};
+
+// ── 11 DAILY ROUTINES ────────────────────────────────────────────────────────
 function isScheduledToday(r) {
   if (r.schedule === "weekdays") { const d = todayDate().getDay(); return d >= 1 && d <= 5; }
   return true; // daily / default
@@ -1026,7 +1246,7 @@ function editRoutine(id) {
   });
 }
 
-// ── 11 DATA & SYNC ───────────────────────────────────────────────────────────
+// ── 12 DATA & SYNC ───────────────────────────────────────────────────────────
 VIEWS.data = {
   render() {
     const live = DB.mode === "firestore";
