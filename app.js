@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
@@ -1409,6 +1409,7 @@ async function boot() {
   for (const col of COLLECTIONS) DB.subscribe(col, (list) => { state[col] = list; onDataChanged(); });
 
   try { await seedIfEmpty(); } catch (e) { console.warn("seed skipped", e); }
+  try { await upgradePortfolio(); } catch (e) { console.warn("portfolio upgrade skipped", e); }
   render();
 }
 
