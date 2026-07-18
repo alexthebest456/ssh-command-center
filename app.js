@@ -121,21 +121,31 @@ function renderField(f, val) {
 }
 
 // ── Navigation ───────────────────────────────────────────────────────────────
-const NAV = [
-  { id: "today", n: "01", label: "Today" },
-  { id: "capture", n: "02", label: "Capture" },
-  { id: "content", n: "03", label: "Content Calendar" },
-  { id: "horizon", n: "04", label: "2-Week Horizon" },
-  { id: "builds", n: "05", label: "Active Builds" },
-  { id: "calendar", n: "06", label: "Property Calendar" },
-  { id: "maintenance", n: "07", label: "Maintenance" },
-  { id: "leases", n: "08", label: "Leases & Rent" },
-  { id: "backlog", n: "09", label: "Backlog" },
-  { id: "scorecard", n: "10", label: "Monthly Scorecard" },
-  { id: "weekly", n: "11", label: "Weekly Review" },
-  { id: "productivity", n: "12", label: "Productivity" },
-  { id: "routines", n: "13", label: "Daily Routines" },
-  { id: "data", n: "14", label: "Data & Sync" },
+const NAV_GROUPS = [
+  { title: "Focus", items: [
+    { id: "today", label: "Today" },
+    { id: "capture", label: "Capture" },
+    { id: "horizon", label: "2-Week Horizon" },
+    { id: "backlog", label: "Backlog" },
+  ]},
+  { title: "Properties", items: [
+    { id: "builds", label: "Active Builds" },
+    { id: "calendar", label: "Property Calendar" },
+    { id: "maintenance", label: "Maintenance" },
+    { id: "leases", label: "Leases & Rent" },
+  ]},
+  { title: "Marketing", items: [
+    { id: "content", label: "Content Calendar" },
+  ]},
+  { title: "Review", items: [
+    { id: "scorecard", label: "Monthly Scorecard" },
+    { id: "weekly", label: "Weekly Review" },
+    { id: "productivity", label: "Productivity" },
+    { id: "routines", label: "Daily Routines" },
+  ]},
+  { title: "System", items: [
+    { id: "data", label: "Data & Sync" },
+  ]},
 ];
 
 function badgeFor(id) {
@@ -149,14 +159,18 @@ function badgeFor(id) {
 }
 
 function renderNav() {
-  $("#nav").innerHTML = NAV.map((item) => {
-    const b = badgeFor(item.id);
-    return `<button class="nav-item ${item.id === currentView ? "active" : ""}" data-nav="${item.id}">
-      <span class="num">${item.n}</span>
-      <span class="label">${esc(item.label)}</span>
-      ${b ? `<span class="badge">${b}</span>` : ""}
-    </button>`;
-  }).join("");
+  $("#nav").innerHTML = NAV_GROUPS.map((g) => `
+    <div class="nav-group">
+      <div class="nav-group-title">${esc(g.title)}</div>
+      ${g.items.map((item) => {
+        const b = badgeFor(item.id);
+        return `<button class="nav-item ${item.id === currentView ? "active" : ""}" data-nav="${item.id}">
+          <span class="dot"></span>
+          <span class="label">${esc(item.label)}</span>
+          ${b ? `<span class="badge">${b}</span>` : ""}
+        </button>`;
+      }).join("")}
+    </div>`).join("");
   $("#nav").querySelectorAll("[data-nav]").forEach((b) =>
     b.addEventListener("click", () => go(b.dataset.nav)));
 }
