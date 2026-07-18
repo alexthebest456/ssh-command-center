@@ -15,7 +15,7 @@ import { getFirestore } from "firebase-admin/firestore";
 
 const API_KEY = process.env.DOORLOOP_API_KEY;
 const SA = process.env.FIREBASE_SERVICE_ACCOUNT;
-const BASE = (process.env.DOORLOOP_BASE || "https://api.doorloop.com/api").replace(/\/$/, "");
+const BASE = (process.env.DOORLOOP_BASE || "https://app.doorloop.com/api").replace(/\/$/, "");
 const DEBUG = process.env.DEBUG === "1";
 
 if (!API_KEY) { console.error("❌ Missing DOORLOOP_API_KEY"); process.exit(1); }
