@@ -123,6 +123,11 @@ server-side in Actions with the key stored as an encrypted secret.
    workflow**. Tick the *debug* box on the first run to print a sample task in
    the logs (used to confirm/adjust field mapping). After that it runs hourly.
 
+The same run also syncs **leases** into the `leases` collection (rent, tenant,
+start/end, property) so the **Leases & Rent** tab stays current. Rent-increase
+settings you enter in the app — CPI %, max-increase cap, last-increase date —
+are preserved across syncs (DoorLoop only owns rent/dates/tenant).
+
 Synced tickets carry `source: "doorloop"`, land in the `tasks` collection tagged
 `maintenance`, and are matched to your properties by name. Completing a ticket in
 the app is respected — the sync won't reopen it. The Maintenance tab shows

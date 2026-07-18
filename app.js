@@ -6,7 +6,7 @@ import { seedIfEmpty, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
-  "properties", "tasks", "content", "events",
+  "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
@@ -37,6 +37,8 @@ function relTime(ms) {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 }
+function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; }
+function money0(v) { const n = Number(v); return isNaN(n) ? "—" : "$" + Math.round(n).toLocaleString(); }
 
 function dueMeta(s) {
   const n = daysUntil(s);
@@ -127,12 +129,13 @@ const NAV = [
   { id: "builds", n: "05", label: "Active Builds" },
   { id: "calendar", n: "06", label: "Property Calendar" },
   { id: "maintenance", n: "07", label: "Maintenance" },
-  { id: "backlog", n: "08", label: "Backlog" },
-  { id: "scorecard", n: "09", label: "Monthly Scorecard" },
-  { id: "weekly", n: "10", label: "Weekly Review" },
-  { id: "productivity", n: "11", label: "Productivity" },
-  { id: "routines", n: "12", label: "Daily Routines" },
-  { id: "data", n: "13", label: "Data & Sync" },
+  { id: "leases", n: "08", label: "Leases & Rent" },
+  { id: "backlog", n: "09", label: "Backlog" },
+  { id: "scorecard", n: "10", label: "Monthly Scorecard" },
+  { id: "weekly", n: "11", label: "Weekly Review" },
+  { id: "productivity", n: "12", label: "Productivity" },
+  { id: "routines", n: "13", label: "Daily Routines" },
+  { id: "data", n: "14", label: "Data & Sync" },
 ];
 
 function badgeFor(id) {
@@ -141,6 +144,7 @@ function badgeFor(id) {
   if (id === "backlog") return backlogTasks().length || "";
   if (id === "builds") return activeBuilds().length || "";
   if (id === "maintenance") return maintenanceTasks().length || "";
+  if (id === "leases") return leasesNeedingNotice().length || "";
   return "";
 }
 
@@ -180,6 +184,47 @@ function backlogTasks() {
 function isMaintenance(t) { return (t.tags || []).includes("maintenance") || t.source === "doorloop"; }
 function maintenanceTasks() {
   return openTasks().filter(isMaintenance).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+// ── Lease / rent-increase math ────────────────────────────────────────────────
+// Default cap follows California AB 1482: max annual increase = 5% + regional
+// CPI, capped at 10%. Both the CPI and the cap are editable per lease.
+function leaseCalc(l) {
+  const rent = Number(l.currentRent) || 0;
+  const cpi = (l.cpiPct === "" || l.cpiPct == null) ? null : Number(l.cpiPct);
+  const capExplicit = (l.capPct !== "" && l.capPct != null) ? Number(l.capPct) : null;
+  const cap = capExplicit != null ? capExplicit : (cpi != null ? Math.min(10, 5 + cpi) : 5);
+  const interval = Number(l.intervalMonths) || 12;
+  const noticeDays = Number(l.noticeDays) || 60;
+  const base = parseISO(l.lastIncreaseDate) || parseISO(l.leaseStart);
+
+  let next = null, noticeBy = null, status = "none", daysToNotice = null, daysToNext = null;
+  if (base && rent) {
+    next = addMonths(base, interval);
+    while (next < todayDate()) next = addMonths(next, interval);
+    noticeBy = new Date(next.getTime() - noticeDays * DAY);
+    daysToNext = daysUntil(toISO(next));
+    daysToNotice = daysUntil(toISO(noticeBy));
+    if (daysToNext <= 0) status = "due";
+    else if (daysToNotice <= 0) status = "notice";   // inside the notice window now
+    else if (daysToNotice <= 14) status = "soon";
+    else status = "ok";
+  }
+
+  // 5-increase forecast at the max allowable each cycle, starting at next increase.
+  const forecast = [];
+  let r = rent, d = next ? new Date(next) : null;
+  for (let i = 0; i < 5; i++) {
+    r = Math.round(r * (1 + cap / 100));
+    forecast.push({ date: d ? new Date(d) : null, rent: r });
+    if (d) d = addMonths(d, interval);
+  }
+  const nextRent = rent ? Math.round(rent * (1 + cap / 100)) : 0;
+  return { rent, cpi, cap, interval, noticeDays, next, noticeBy, status, daysToNotice, daysToNext, forecast, nextRent };
+}
+
+function leasesNeedingNotice() {
+  return state.leases.filter((l) => { const s = leaseCalc(l).status; return s === "notice" || s === "due"; });
 }
 
 // ── Task row + editor (shared) ───────────────────────────────────────────────
@@ -296,10 +341,24 @@ VIEWS.today = {
           ${contentToday.length ? `<div class="panel-title mt"><span class="n">05</span> Content Due Today</div>${contentToday.map(contentRow).join("")}` : ""}
         </div>
       </div>
+
+      ${(() => {
+        const notices = leasesNeedingNotice();
+        if (!notices.length) return "";
+        return `<div class="panel mt" style="border-color:var(--red);background:rgba(255,107,107,0.06)">
+          <div class="panel-title"><span class="n" style="color:var(--red)">!</span> Rent Increases — Action Needed</div>
+          ${notices.map((l) => { const c = leaseCalc(l); return `<div class="row" data-lease-today="${l.id}" style="cursor:pointer"><div class="body">
+            <div class="t">${esc(propName(l.propertyId) || l.propertyName || "Lease")}${l.unit ? " · " + esc(l.unit) : ""}</div>
+            <div class="m"><span class="tag ${c.status === "due" ? "red" : "amber"}">${LEASE_STATUS[c.status].label}</span>
+            <span>notice by ${c.noticeBy ? fmtDate(toISO(c.noticeBy)) : "—"}</span>
+            <span>→ ${money0(c.nextRent)} (${c.cap}%)</span></div></div></div>`; }).join("")}
+        </div>`;
+      })()}
     </div>`;
   },
   mount(root) {
     wireTaskRows(root);
+    root.querySelectorAll("[data-lease-today]").forEach((el) => el.addEventListener("click", () => go("leases")));
     root.querySelectorAll("[data-routine-toggle]").forEach((el) =>
       el.addEventListener("click", () => toggleRoutine(el.dataset.routineToggle)));
     root.querySelectorAll("[data-add-task]").forEach((el) => el.addEventListener("click", () => editTask()));
@@ -902,7 +961,115 @@ function maintRow(t) {
   </div>`;
 }
 
-// ── 08 BACKLOG ───────────────────────────────────────────────────────────────
+// ── 08 LEASES & RENT ─────────────────────────────────────────────────────────
+const LEASE_STATUS = {
+  due: { cls: "red", label: "Increase due" },
+  notice: { cls: "amber", label: "Send notice now" },
+  soon: { cls: "blue", label: "Notice window soon" },
+  ok: { cls: "green", label: "On track" },
+  none: { cls: "", label: "Set rent + dates" },
+};
+
+VIEWS.leases = {
+  render() {
+    const leases = [...state.leases].sort((a, b) => {
+      const order = { due: 0, notice: 1, soon: 2, ok: 3, none: 4 };
+      return order[leaseCalc(a).status] - order[leaseCalc(b).status];
+    });
+    const totalRent = leases.reduce((a, l) => a + (Number(l.currentRent) || 0), 0);
+    const in5 = leases.reduce((a, l) => { const f = leaseCalc(l).forecast; return a + (f[4]?.rent || Number(l.currentRent) || 0); }, 0);
+    const needNotice = leasesNeedingNotice().length;
+    const fromDl = leases.filter((l) => l.source === "doorloop").length;
+
+    return `
+    <div class="view">
+      <div class="view-head">
+        <div><div class="eyebrow">Rent Roll</div><h1>Leases &amp; Rent</h1></div>
+        <button class="btn primary" data-add-lease>+ Add lease</button>
+      </div>
+
+      <div class="grid cols-4 mb">
+        <div class="stat"><div class="k">Leases</div><div class="v">${leases.length}</div><div class="sub">${fromDl} from DoorLoop</div></div>
+        <div class="stat"><div class="k">Monthly Rent</div><div class="v" style="font-size:21px">${money0(totalRent)}</div><div class="sub">current roll</div></div>
+        <div class="stat"><div class="k">Need Notice</div><div class="v ${needNotice ? "red" : "green"}">${needNotice}</div><div class="sub">≤60-day window</div></div>
+        <div class="stat"><div class="k">Roll in 5 Yrs</div><div class="v green" style="font-size:21px">${money0(in5)}</div><div class="sub">at max increases</div></div>
+      </div>
+
+      ${leases.length ? leases.map(leaseCard).join("") : `<div class="empty">
+        No leases yet. Add one, or set up DoorLoop sync to pull them in.<br>
+        Each lease tracks the next increase date, your 60-day notice deadline, the CPI cap, and a 5-year forecast.</div>`}
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-add-lease]").forEach((el) => el.addEventListener("click", () => editLease()));
+    root.querySelectorAll("[data-edit-lease]").forEach((el) => el.addEventListener("click", () => editLease(el.dataset.editLease)));
+  },
+};
+
+function leaseCard(l) {
+  const c = leaseCalc(l);
+  const st = LEASE_STATUS[c.status];
+  const who = [propName(l.propertyId) || l.propertyName, l.unit].filter(Boolean).join(" · ");
+  return `
+  <div class="panel mb">
+    <div class="flex between wrap" style="align-items:flex-start">
+      <div>
+        <div class="panel-title" style="margin:0"><span class="n">▦</span> ${esc(who || "Unassigned")}
+          ${l.source === "doorloop" ? `<span class="tag blue">DoorLoop</span>` : ""}</div>
+        <div class="mono muted" style="font-size:11px;margin-top:4px">
+          ${l.tenant ? esc(l.tenant) + " · " : ""}${c.rent ? money0(c.rent) + "/mo" : "no rent set"}
+          ${l.leaseEnd ? " · lease ends " + fmtDate(l.leaseEnd) : ""}</div>
+      </div>
+      <span class="tag ${st.cls}">${st.label}</span>
+    </div>
+
+    <div class="grid cols-3 mt">
+      <div class="stat"><div class="k">Next increase</div><div class="v" style="font-size:16px">${c.next ? fmtDate(toISO(c.next)) : "—"}</div>
+        <div class="sub">${c.next ? c.daysToNext + " days" : "set last-increase date"}</div></div>
+      <div class="stat"><div class="k">Notice by (${c.noticeDays}d)</div>
+        <div class="v ${c.status === "notice" || c.status === "due" ? "red" : c.status === "soon" ? "amber" : ""}" style="font-size:16px">${c.noticeBy ? fmtDate(toISO(c.noticeBy)) : "—"}</div>
+        <div class="sub">${c.noticeBy ? (c.daysToNotice <= 0 ? "window open" : "in " + c.daysToNotice + "d") : ""}</div></div>
+      <div class="stat"><div class="k">Max increase</div><div class="v amber" style="font-size:16px">${c.cap}%</div>
+        <div class="sub">${c.cpi != null ? "5% + " + c.cpi + "% CPI, cap 10%" : "cap"} → ${money0(c.nextRent)}</div></div>
+    </div>
+
+    <div class="mt">
+      <div class="panel-title" style="font-size:10px"><span class="n">▸</span> 5-Year forecast (at ${c.cap}%/yr)</div>
+      <div class="cal-grid" style="grid-template-columns:repeat(6,1fr);gap:6px">
+        <div class="stat" style="padding:8px 10px"><div class="k">Now</div><div class="mono" style="font-size:14px;margin-top:3px">${money0(c.rent)}</div></div>
+        ${c.forecast.map((f, i) => `<div class="stat" style="padding:8px 10px"><div class="k">Yr ${i + 1}${f.date ? " · " + (f.date.getFullYear()) : ""}</div><div class="mono ${i === 4 ? "" : ""}" style="font-size:14px;margin-top:3px;color:var(--green)">${money0(f.rent)}</div></div>`).join("")}
+      </div>
+    </div>
+    <div class="mt"><button class="btn sm ghost" data-edit-lease="${l.id}">✎ Edit lease</button></div>
+  </div>`;
+}
+
+function editLease(id) {
+  const l = id ? state.leases.find((x) => x.id === id) : null;
+  formModal({
+    title: l ? "Edit Lease" : "New Lease",
+    sub: "Rent-increase tracking + forecast",
+    fields: [
+      { key: "propertyId", label: "Property", type: "select", options: propOptions() },
+      { key: "unit", label: "Unit" },
+      { key: "tenant", label: "Tenant" },
+      { key: "currentRent", label: "Current rent ($/mo)", type: "number" },
+      { key: "leaseStart", label: "Lease start", type: "date" },
+      { key: "leaseEnd", label: "Lease end", type: "date" },
+      { key: "lastIncreaseDate", label: "Last increase date (drives the clock)", type: "date" },
+      { key: "cpiPct", label: "Regional CPI % (cap = 5% + this, max 10%)", type: "number", step: "0.1" },
+      { key: "capPct", label: "Override max increase % (optional)", type: "number", step: "0.1" },
+      { key: "intervalMonths", label: "Months between increases", type: "number", default: 12 },
+      { key: "noticeDays", label: "Advance notice required (days)", type: "number", default: 60 },
+      { key: "notes", label: "Notes", type: "textarea" },
+    ],
+    values: l || { intervalMonths: 12, noticeDays: 60 },
+    onSubmit: (v) => { DB.upsert("leases", { ...(l || {}), ...v }); toast(l ? "Lease updated" : "Lease added"); },
+    onDelete: l ? () => DB.remove("leases", l.id) : null,
+  });
+}
+
+// ── 09 BACKLOG ───────────────────────────────────────────────────────────────
 VIEWS.backlog = {
   render() {
     const tasks = backlogTasks();

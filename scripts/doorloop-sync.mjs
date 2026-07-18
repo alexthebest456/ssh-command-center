@@ -100,6 +100,67 @@ function isOpen(task) {
   return !(s.includes("done") || s.includes("complete") || s.includes("closed") || s.includes("resolved") || s.includes("cancel"));
 }
 
+// ── Lease field extraction (defensive; DoorLoop shapes vary by account) ────────
+function leaseRent(lease) {
+  if (typeof lease.totalRecurringRent === "number") return lease.totalRecurringRent;
+  if (typeof lease.rent === "number") return lease.rent;
+  const charges = lease.rentCharges || lease.charges;
+  if (Array.isArray(charges)) return charges.reduce((a, c) => a + (Number(c.amount) || 0), 0) || "";
+  return "";
+}
+function leaseTenant(lease) {
+  const ts = lease.tenants || lease.primaryTenants;
+  if (Array.isArray(ts) && ts.length) {
+    return ts.map((t) => t.name || t.fullName || [t.firstName, t.lastName].filter(Boolean).join(" ")).filter(Boolean).join(", ");
+  }
+  return lease.name || "";
+}
+function leasePropName(lease, dlProps) {
+  const prop = lease.property;
+  if (prop && typeof prop === "object") return prop.name || "";
+  const pid = typeof prop === "string" ? prop : lease.propertyId;
+  if (pid && dlProps.has(String(pid))) return dlProps.get(String(pid));
+  return lease.propertyName || "";
+}
+function leaseUnit(lease) {
+  const us = lease.units;
+  if (Array.isArray(us) && us.length) return us.map((u) => u.name || u.number).filter(Boolean).join(", ");
+  return lease.unit || lease.unitName || "";
+}
+
+async function syncLeases(appProps, dlProps) {
+  let leases;
+  try { leases = await fetchAll("/leases"); }
+  catch (e) { console.warn("⚠️  Could not fetch leases:", e.message); return 0; }
+  console.log(`  DoorLoop returned ${leases.length} leases.`);
+  if (DEBUG && leases[0]) console.log("Sample lease:\n", JSON.stringify(leases[0], null, 2));
+
+  let n = 0;
+  for (const lease of leases) {
+    const dlId = String(lease.id ?? lease._id ?? "");
+    if (!dlId) continue;
+    const dlName = leasePropName(lease, dlProps);
+    // DoorLoop-sourced fields only. cpiPct / capPct / lastIncreaseDate stay
+    // whatever the user set (merge:true leaves unset keys untouched).
+    const data = {
+      propertyId: matchProperty(dlName, appProps),
+      propertyName: dlName,
+      unit: leaseUnit(lease),
+      tenant: leaseTenant(lease),
+      currentRent: leaseRent(lease),
+      leaseStart: String(lease.start || lease.startDate || "").slice(0, 10),
+      leaseEnd: String(lease.end || lease.endDate || "").slice(0, 10),
+      source: "doorloop", doorloopId: dlId, updatedAt: Date.now(),
+    };
+    const ref = db.collection("leases").doc("dl-lease-" + dlId);
+    const ex = await ref.get();
+    if (!ex.exists) { data.intervalMonths = 12; data.noticeDays = 60; data.createdAt = Date.now(); }
+    await ref.set(data, { merge: true });
+    n++;
+  }
+  return n;
+}
+
 async function run() {
   console.log("→ Loading app properties from Firestore…");
   const appProps = await loadAppProperties();
@@ -147,14 +208,18 @@ async function run() {
     await docRef.set(data, { merge: true });
     existing.exists ? updated++ : created++;
   }
+  console.log("→ Syncing leases…");
+  const leaseCount = await syncLeases(appProps, dlProps);
+
   // Marker the dashboard reads to show "auto-sync is on · last synced …".
   await db.collection("meta").doc("doorloopSync").set({
     lastRun: Date.now(),
-    lastCount: tasks.length,
+    lastTaskCount: tasks.length,
+    lastLeaseCount: leaseCount,
     created, updated,
   }, { merge: true });
 
-  console.log(`✓ Sync complete: ${created} new, ${updated} updated, ${kept} left as you had them.`);
+  console.log(`✓ Sync complete: tasks ${created} new / ${updated} updated / ${kept} kept · leases ${leaseCount}.`);
 }
 
 run().catch((e) => { console.error("❌ Sync failed:", e.message); process.exit(1); });
