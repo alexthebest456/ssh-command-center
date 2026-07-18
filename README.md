@@ -100,14 +100,37 @@ Builds → Add** on any build card (the phone camera opens directly).
 
 ---
 
-## Future: DoorLoop auto-sync (not built yet)
+## DoorLoop auto-sync (maintenance work orders)
 
-DoorLoop exposes a REST API (`api.doorloop.com`, API-key auth) for leases, tenants,
-and maintenance. The property calendar and scorecard were designed so a future
-sync job can populate lease-end / vacancy / maintenance events automatically instead
-of manual entry. This is scaffolded conceptually but intentionally **not** wired up
-yet. Note: a browser can't safely hold a DoorLoop API key, so that integration would
-run through a small serverless function (e.g. a Cloud Function) — a later step.
+A scheduled **GitHub Action** ([`.github/workflows/doorloop-sync.yml`](.github/workflows/doorloop-sync.yml))
+pulls maintenance work orders from the DoorLoop API into Firestore, so new
+tickets appear on the dashboard's **Maintenance** tab automatically — no
+screenshots. A browser can't safely hold the API key, which is why this runs
+server-side in Actions with the key stored as an encrypted secret.
+
+### One-time setup
+
+1. **DoorLoop API key** — DoorLoop ▸ **Settings ▸ Zapier & API Keys** ▸ create a
+   key. (If you don't see that section, your DoorLoop plan may need API access
+   enabled — ask DoorLoop support.)
+2. **Firebase service account** — Firebase console ▸ **Project settings ▸
+   Service accounts** ▸ **Generate new private key**. This downloads a JSON file.
+3. **Add both as repo secrets** — GitHub repo ▸ **Settings ▸ Secrets and
+   variables ▸ Actions ▸ New repository secret**:
+   - `DOORLOOP_API_KEY` = the DoorLoop key
+   - `FIREBASE_SERVICE_ACCOUNT` = the **entire contents** of the JSON file
+4. **Run it once** — repo ▸ **Actions ▸ "DoorLoop → Dashboard sync" ▸ Run
+   workflow**. Tick the *debug* box on the first run to print a sample task in
+   the logs (used to confirm/adjust field mapping). After that it runs hourly.
+
+Synced tickets carry `source: "doorloop"`, land in the `tasks` collection tagged
+`maintenance`, and are matched to your properties by name. Completing a ticket in
+the app is respected — the sync won't reopen it. The Maintenance tab shows
+"auto-sync is on · last synced …" once the Action has run.
+
+> **Field mapping.** DoorLoop's exact task JSON field names can vary by account.
+> The script reads them defensively; if titles/properties look off after the
+> first run, share the debug log's sample task and the mapping is a one-line fix.
 
 ---
 

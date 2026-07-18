@@ -7,7 +7,7 @@ import { seedIfEmpty, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
   "properties", "tasks", "content", "events",
-  "routines", "routineLog", "photos", "reviews", "scorecards",
+  "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -30,6 +30,13 @@ function fmtDate(s) {
 function fmtLong(d) { return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }); }
 function daysUntil(s) { const d = parseISO(s); if (!d) return null; return Math.round((d - todayDate()) / DAY); }
 function mondayOf(d) { const x = new Date(d); const day = (x.getDay() + 6) % 7; x.setDate(x.getDate() - day); x.setHours(0,0,0,0); return x; }
+function relTime(ms) {
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 function dueMeta(s) {
   const n = daysUntil(s);
@@ -119,12 +126,13 @@ const NAV = [
   { id: "horizon", n: "04", label: "2-Week Horizon" },
   { id: "builds", n: "05", label: "Active Builds" },
   { id: "calendar", n: "06", label: "Property Calendar" },
-  { id: "backlog", n: "07", label: "Backlog" },
-  { id: "scorecard", n: "08", label: "Monthly Scorecard" },
-  { id: "weekly", n: "09", label: "Weekly Review" },
-  { id: "productivity", n: "10", label: "Productivity" },
-  { id: "routines", n: "11", label: "Daily Routines" },
-  { id: "data", n: "12", label: "Data & Sync" },
+  { id: "maintenance", n: "07", label: "Maintenance" },
+  { id: "backlog", n: "08", label: "Backlog" },
+  { id: "scorecard", n: "09", label: "Monthly Scorecard" },
+  { id: "weekly", n: "10", label: "Weekly Review" },
+  { id: "productivity", n: "11", label: "Productivity" },
+  { id: "routines", n: "12", label: "Daily Routines" },
+  { id: "data", n: "13", label: "Data & Sync" },
 ];
 
 function badgeFor(id) {
@@ -132,6 +140,7 @@ function badgeFor(id) {
   if (id === "horizon") return horizonTasks().length || "";
   if (id === "backlog") return backlogTasks().length || "";
   if (id === "builds") return activeBuilds().length || "";
+  if (id === "maintenance") return maintenanceTasks().length || "";
   return "";
 }
 
@@ -167,6 +176,10 @@ function horizonTasks() {
 }
 function backlogTasks() {
   return openTasks().filter((t) => !t.due).sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0) === 0 ? (b.createdAt || 0) - (a.createdAt || 0) : (b.priority ?? 0) - (a.priority ?? 0));
+}
+function isMaintenance(t) { return (t.tags || []).includes("maintenance") || t.source === "doorloop"; }
+function maintenanceTasks() {
+  return openTasks().filter(isMaintenance).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 // ── Task row + editor (shared) ───────────────────────────────────────────────
@@ -795,7 +808,101 @@ function editEvent(id) {
   });
 }
 
-// ── 07 BACKLOG ───────────────────────────────────────────────────────────────
+// ── 07 MAINTENANCE ───────────────────────────────────────────────────────────
+VIEWS.maintenance = {
+  render() {
+    const tasks = maintenanceTasks();
+    const doneRecently = state.tasks.filter((t) => isMaintenance(t) && t.status === "done").length;
+    const fromDoorloop = tasks.filter((t) => t.source === "doorloop").length;
+
+    // group by property
+    const groups = {};
+    for (const t of tasks) { const k = t.propertyId || "__none"; (groups[k] = groups[k] || []).push(t); }
+    const keys = Object.keys(groups).sort((a, b) => propName(a).localeCompare(propName(b)));
+
+    return `
+    <div class="view">
+      <div class="view-head">
+        <div><div class="eyebrow">Work Orders</div><h1>Maintenance</h1></div>
+        <button class="btn primary" data-add-maint>+ Add work order</button>
+      </div>
+
+      <div class="grid cols-3 mb">
+        <div class="stat"><div class="k">Open</div><div class="v ${tasks.length ? "amber" : "green"}">${tasks.length}</div><div class="sub">work orders</div></div>
+        <div class="stat"><div class="k">From DoorLoop</div><div class="v">${fromDoorloop}</div><div class="sub">auto-synced</div></div>
+        <div class="stat"><div class="k">Completed</div><div class="v green">${doneRecently}</div><div class="sub">all-time</div></div>
+      </div>
+
+      ${(() => {
+        const sync = state.meta.find((m) => m.id === "doorloopSync");
+        const on = !!(sync && sync.lastRun);
+        return `<div class="panel mb" style="border-color:var(--amber-line);background:var(--amber-soft)">
+          <div class="flex" style="gap:10px;align-items:flex-start">
+            <span style="font-size:18px">🔗</span>
+            <div>
+              <strong>DoorLoop auto-sync ${on ? "is on" : "not set up yet"}</strong>
+              <div class="muted" style="font-size:12.5px;margin-top:3px">
+                ${on
+                  ? `New DoorLoop maintenance tickets appear here automatically. Last synced ${relTime(sync.lastRun)}.`
+                  : "These were imported manually. To have new DoorLoop tickets pull in on their own, set up auto-sync (see README) — you add two keys and it runs hourly."}
+              </div>
+            </div>
+          </div>
+        </div>`;
+      })()}
+
+      ${tasks.length ? keys.map((k) => `
+        <div class="panel mb">
+          <div class="panel-title"><span class="n">▦</span> ${esc(propName(k) || "Unassigned")}
+            <span class="badge" style="margin-left:auto">${groups[k].length}</span></div>
+          ${groups[k].map(maintRow).join("")}
+        </div>`).join("")
+        : `<div class="empty">No open maintenance work orders. 🎉</div>`}
+    </div>`;
+  },
+  mount(root) {
+    wireTaskRows(root);
+    root.querySelectorAll("[data-add-maint]").forEach((el) => el.addEventListener("click", () => addMaintenance()));
+  },
+};
+
+function addMaintenance() {
+  formModal({
+    title: "New Work Order",
+    fields: [
+      { key: "title", label: "What needs fixing?" },
+      { key: "propertyId", label: "Property", type: "select", options: propOptions() },
+      { key: "priority", label: "Priority", type: "select", options: [[0, "Normal"], [1, "Medium"], [2, "High"]] },
+      { key: "notes", label: "Notes", type: "textarea" },
+    ],
+    values: { priority: 1 },
+    onSubmit: (v) => {
+      DB.upsert("tasks", { id: undefined, title: v.title, propertyId: v.propertyId, priority: Number(v.priority), notes: v.notes, status: "open", due: "", tags: ["maintenance"] });
+      toast("Work order added");
+    },
+  });
+}
+
+function maintRow(t) {
+  const dm = dueMeta(t.due);
+  const ref = (t.notes || "").match(/#([A-Z0-9]{5,})/);
+  const submitter = (t.notes || "").match(/Submitted by ([^\n(]+)/);
+  return `<div class="row ${t.status === "done" ? "done" : ""}">
+    <div class="check ${t.status === "done" ? "done" : ""}" data-toggle="${t.id}">✓</div>
+    <div class="body">
+      <div class="t">${esc(t.title)}</div>
+      <div class="m">
+        ${t.source === "doorloop" ? `<span class="tag blue">DoorLoop</span>` : `<span class="tag amber">maintenance</span>`}
+        ${ref ? `<span class="mono">#${esc(ref[1])}</span>` : ""}
+        ${submitter ? `<span>👤 ${esc(submitter[1].trim())}</span>` : ""}
+        ${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}
+      </div>
+    </div>
+    <div class="actions"><button class="icon-btn" data-edit-task="${t.id}">✎</button></div>
+  </div>`;
+}
+
+// ── 08 BACKLOG ───────────────────────────────────────────────────────────────
 VIEWS.backlog = {
   render() {
     const tasks = backlogTasks();

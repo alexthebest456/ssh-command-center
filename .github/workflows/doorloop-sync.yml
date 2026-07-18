@@ -1,0 +1,44 @@
+name: DoorLoop → Dashboard sync
+
+# Pulls maintenance work orders from DoorLoop into Firestore so they appear on
+# the SSH Command Center dashboard automatically.
+#
+# Setup (one time):
+#   1. DoorLoop ▸ Settings ▸ Zapier & API Keys → create an API key.
+#   2. Firebase console ▸ Project settings ▸ Service accounts → "Generate new
+#      private key" (downloads a JSON file).
+#   3. In this repo: Settings ▸ Secrets and variables ▸ Actions ▸ New secret:
+#        DOORLOOP_API_KEY          = the DoorLoop key
+#        FIREBASE_SERVICE_ACCOUNT  = the entire contents of the JSON file
+#   4. Run it once from the Actions tab (below) to confirm, then it runs hourly.
+
+on:
+  schedule:
+    - cron: "17 * * * *"      # hourly (at :17 to avoid the top-of-hour rush)
+  workflow_dispatch:           # lets you run it on demand from the Actions tab
+    inputs:
+      debug:
+        description: "Log a sample DoorLoop task (field-mapping calibration)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: doorloop-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install firebase-admin
+        run: npm install --no-save firebase-admin@12
+      - name: Sync DoorLoop → Firestore
+        env:
+          DOORLOOP_API_KEY: ${{ secrets.DOORLOOP_API_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DEBUG: ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
+        run: node scripts/doorloop-sync.mjs
