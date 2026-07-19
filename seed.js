@@ -143,14 +143,14 @@ export async function seedIfEmpty() {
 export async function seedPersonalOS() {
   if (!DB.hasAny("habits")) {
     const habits = [
-      { name: "Wake at 5:00 AM", icon: "⏰", cadence: "daily", target: 1, weight: 1, order: 1 },
-      { name: "Morning workout", icon: "💪", cadence: "daily", target: 1, weight: 1, order: 2 },
-      { name: "Eat healthy all day", icon: "🥗", cadence: "daily", target: 1, weight: 1, order: 3 },
-      { name: "No coffee (pre-workout ok)", icon: "🚫", cadence: "daily", target: 1, weight: 1, order: 4 },
-      { name: "Read 15 minutes", icon: "📖", cadence: "daily", target: 1, weight: 1, order: 5 },
+      { name: "Wake at 5:00 AM", icon: "⏰", cadence: "daily", target: 1, weight: 1, order: 1, time: "5:00 AM" },
+      { name: "Morning workout", icon: "💪", cadence: "daily", target: 1, weight: 1, order: 2, time: "5:30 AM" },
+      { name: "Clean & organize space", icon: "🧹", cadence: "daily", target: 1, weight: 1, order: 3, time: "6:30 AM" },
+      { name: "Eat healthy all day", icon: "🥗", cadence: "daily", target: 1, weight: 1, order: 4 },
+      { name: "No coffee (pre-workout ok)", icon: "🚫", cadence: "daily", target: 1, weight: 1, order: 5 },
       { name: "Handle work priorities", icon: "🎯", cadence: "daily", target: 1, weight: 1, order: 6 },
       { name: "Take Meatball out", icon: "🐕", cadence: "daily", target: 2, weight: 1, order: 7 },
-      { name: "Clean & organize space", icon: "🧹", cadence: "daily", target: 1, weight: 1, order: 8 },
+      { name: "Read 15 minutes", icon: "📖", cadence: "daily", target: 1, weight: 1, order: 8, time: "9:00 PM" },
       { name: "Meal prep (next 5 days)", icon: "🍱", cadence: "everyN", everyDays: 5, target: 1, weight: 1, order: 9 },
     ];
     for (const h of habits) await DB.upsert("habits", { id: undefined, ...h });

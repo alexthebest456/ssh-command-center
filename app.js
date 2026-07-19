@@ -12,7 +12,7 @@ const COLLECTIONS = [
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
-let currentView = localStorage.getItem("sshcc:view") || "today";
+let currentView = localStorage.getItem("sshcc:view") || "myday";
 let calMonth = startOfMonth(new Date());
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -124,12 +124,12 @@ function renderField(f, val) {
 // ── Navigation ───────────────────────────────────────────────────────────────
 const NAV_GROUPS = [
   { title: "Personal OS", items: [
+    { id: "myday", label: "My Day" },
     { id: "dailyos", label: "Daily Non-Negotiables" },
     { id: "goals", label: "Goals" },
     { id: "reading", label: "Reading" },
   ]},
   { title: "Focus", items: [
-    { id: "today", label: "Today" },
     { id: "capture", label: "Capture" },
     { id: "horizon", label: "2-Week Horizon" },
     { id: "backlog", label: "Backlog" },
@@ -357,6 +357,72 @@ function mealPrepStatus(h) {
 }
 function goalPct(g) { const m = g.milestones || []; return m.length ? Math.round(m.filter((x) => x.done).length / m.length * 100) : 0; }
 
+// ── Personal · My Day (unified morning command screen) ───────────────────────
+VIEWS.myday = {
+  render() {
+    const hs = dailyHabits();
+    const score = dayScore();
+    const doneH = hs.filter((h) => habitDone(h)).length;
+    const mp = everyNHabit();
+    const mps = mp ? mealPrepStatus(mp) : null;
+    const tasks = openToday();
+    const events = state.events.filter((e) => e.date === todayISO());
+    const notices = leasesNeedingNotice();
+    const permits = activeBuilds().map((p) => ({ p, c: permitStatus(p) })).filter((x) => ["warn", "late"].includes(x.c.cls));
+    const maint = maintenanceTasks().length;
+    const headsUp = notices.length + permits.length + (maint ? 1 : 0);
+
+    return `
+    <div class="view">
+      <div class="view-head">
+        <div><div class="eyebrow">Your Command Center</div><h1>My Day</h1></div>
+        <div class="meta">${esc(fmtLong(todayDate()))}</div>
+      </div>
+
+      <div class="grid cols-3 mb">
+        <div class="stat"><div class="k">Daily Score</div><div class="v ${score >= 90 ? "green" : score >= 60 ? "amber" : "red"}" style="font-size:34px">${score}</div><div class="sub">/100 · non-negotiables</div></div>
+        <div class="stat"><div class="k">Habits</div><div class="v ${doneH === hs.length && hs.length ? "green" : ""}">${doneH}/${hs.length}</div><div class="sub">done today</div></div>
+        <div class="stat"><div class="k">Priorities</div><div class="v ${tasks.length ? "amber" : "green"}">${tasks.length}</div><div class="sub">tasks due today</div></div>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="panel">
+          <div class="panel-title"><span class="n">☀</span> Non-Negotiables — your schedule</div>
+          ${hs.map(habitRow).join("")}
+          ${mp ? mealPrepRow(mp, mps) : ""}
+        </div>
+        <div class="panel">
+          <div class="flex between"><div class="panel-title" style="margin:0"><span class="n">✓</span> Today's Priorities</div>
+            <button class="btn sm" data-add-today>+ Task</button></div>
+          <div class="mt">${tasks.length ? tasks.map(taskRow).join("") : `<div class="empty">No tasks due today. 🎯</div>`}</div>
+        </div>
+      </div>
+
+      ${(events.length || headsUp) ? `<div class="grid cols-2 mt">
+        <div class="panel">
+          <div class="panel-title"><span class="n">▦</span> On Your Calendar Today</div>
+          ${events.length ? events.map(eventRow).join("") : `<div class="empty">Nothing scheduled today.</div>`}
+        </div>
+        <div class="panel">
+          <div class="panel-title"><span class="n" style="color:${headsUp ? "var(--red)" : "var(--amber)"}">!</span> Heads-Up</div>
+          ${notices.map((l) => { const c = leaseCalc(l); return `<div class="row" data-goto="leases" style="cursor:pointer"><div class="body"><div class="t">Rent notice — ${esc(propName(l.propertyId) || "lease")}</div><div class="m"><span class="tag ${c.status === "due" ? "red" : "amber"}">${LEASE_STATUS[c.status].label}</span><span>by ${c.noticeBy ? fmtDate(toISO(c.noticeBy)) : "—"}</span></div></div></div>`; }).join("")}
+          ${permits.map((x) => `<div class="row" data-goto="builds" style="cursor:pointer"><div class="body"><div class="t">Permit clock — ${esc(x.p.name)}</div><div class="m"><span class="clock ${x.c.cls}" style="font-size:12px">${x.c.label}</span></div></div></div>`).join("")}
+          ${maint ? `<div class="row" data-goto="maintenance" style="cursor:pointer"><div class="body"><div class="t">${maint} open maintenance ${maint === 1 ? "ticket" : "tickets"}</div><div class="m"><span class="tag blue">DoorLoop</span></div></div></div>` : ""}
+          ${!headsUp ? `<div class="empty">All clear. ✈</div>` : ""}
+        </div>
+      </div>` : ""}
+    </div>`;
+  },
+  mount(root) {
+    wireTaskRows(root);
+    root.querySelectorAll("[data-habit]").forEach((el) => el.addEventListener("click", () => { const h = state.habits.find((x) => x.id === el.dataset.habit); if (h) cycleHabit(h); }));
+    root.querySelectorAll("[data-mealprep]").forEach((el) => el.addEventListener("click", () => { const h = state.habits.find((x) => x.id === el.dataset.mealprep); if (h) DB.upsert("habitLog", { id: `${h.id}__${todayISO()}`, habitId: h.id, date: todayISO(), count: 1 }); toast("Meal prep logged — resets in 5 days"); }));
+    root.querySelectorAll("[data-add-today]").forEach((el) => el.addEventListener("click", () => editTaskPrefill({ due: todayISO() })));
+    root.querySelectorAll("[data-event]").forEach((el) => el.addEventListener("click", () => editEvent(el.dataset.event)));
+    root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
+  },
+};
+
 // ── Personal · Daily Non-Negotiables ─────────────────────────────────────────
 VIEWS.dailyos = {
   render() {
@@ -406,7 +472,7 @@ function habitRow(h) {
   return `<div class="row ${done ? "done" : ""}" data-habit="${h.id}" style="cursor:pointer">
     <div class="check ${done ? "done" : ""}">${done ? "✓" : (target > 1 ? cnt : "")}</div>
     <div class="body"><div class="t">${esc(h.icon || "")} ${esc(h.name)}</div>
-      <div class="m">${target > 1 ? `<span class="mono">${cnt}/${target}</span>` : ""}${streak > 0 ? `<span class="tag amber">🔥 ${streak}d</span>` : ""}</div></div>
+      <div class="m">${h.time ? `<span class="mono">${esc(h.time)}</span>` : ""}${target > 1 ? `<span class="mono">${cnt}/${target}</span>` : ""}${streak > 0 ? `<span class="tag amber">🔥 ${streak}d</span>` : ""}</div></div>
   </div>`;
 }
 function mealPrepRow(h, s) {
