@@ -2,12 +2,13 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
+  "habits", "habitLog", "goals", "books",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -122,6 +123,11 @@ function renderField(f, val) {
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 const NAV_GROUPS = [
+  { title: "Personal OS", items: [
+    { id: "dailyos", label: "Daily Non-Negotiables" },
+    { id: "goals", label: "Goals" },
+    { id: "reading", label: "Reading" },
+  ]},
   { title: "Focus", items: [
     { id: "today", label: "Today" },
     { id: "capture", label: "Capture" },
@@ -141,7 +147,6 @@ const NAV_GROUPS = [
     { id: "scorecard", label: "Monthly Scorecard" },
     { id: "weekly", label: "Weekly Review" },
     { id: "productivity", label: "Productivity" },
-    { id: "routines", label: "Daily Routines" },
   ]},
   { title: "System", items: [
     { id: "data", label: "Data & Sync" },
@@ -155,6 +160,7 @@ function badgeFor(id) {
   if (id === "builds") return activeBuilds().length || "";
   if (id === "maintenance") return maintenanceTasks().length || "";
   if (id === "leases") return leasesNeedingNotice().length || "";
+  if (id === "dailyos") { const n = dailyHabits().filter((h) => !habitDone(h)).length; return n || ""; }
   return "";
 }
 
@@ -305,6 +311,246 @@ function editTask(id) {
 //  VIEWS
 // ─────────────────────────────────────────────────────────────────────────────
 const VIEWS = {};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PERSONAL OPERATING SYSTEM — habits, daily score, goals, reading
+// ─────────────────────────────────────────────────────────────────────────────
+function dailyHabits() { return state.habits.filter((h) => h.cadence === "daily").sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); }
+function everyNHabit() { return state.habits.find((h) => h.cadence === "everyN") || null; }
+function habitCount(hid, iso = todayISO()) { const l = state.habitLog.find((x) => x.habitId === hid && x.date === iso); return l ? (l.count || 0) : 0; }
+function habitDone(h, iso = todayISO()) { return habitCount(h.id, iso) >= (h.target || 1); }
+function cycleHabit(h, iso = todayISO()) {
+  const cur = habitCount(h.id, iso);
+  const next = (cur + 1) % ((h.target || 1) + 1); // 0→…→target→0
+  DB.upsert("habitLog", { id: `${h.id}__${iso}`, habitId: h.id, date: iso, count: next });
+}
+function dayScore(iso = todayISO()) {
+  const hs = dailyHabits();
+  if (!hs.length) return 0;
+  let got = 0, tot = 0;
+  for (const h of hs) { const w = h.weight || 1; tot += w; got += Math.min(habitCount(h.id, iso) / (h.target || 1), 1) * w; }
+  return Math.round((got / tot) * 100);
+}
+function habitStreak(h) {
+  let s = 0;
+  for (let i = 0; i < 400; i++) {
+    const iso = toISO(new Date(todayDate().getTime() - i * DAY));
+    if (habitDone(h, iso)) s++;
+    else if (i === 0) continue; // today not done yet — streak still alive
+    else break;
+  }
+  return s;
+}
+function habitPct(h, days = 30) {
+  let d = 0; for (let i = 0; i < days; i++) { if (habitDone(h, toISO(new Date(todayDate().getTime() - i * DAY)))) d++; }
+  return Math.round((d / days) * 100);
+}
+function avgScore(days = 30) { let s = 0; for (let i = 0; i < days; i++) s += dayScore(toISO(new Date(todayDate().getTime() - i * DAY))); return Math.round(s / days); }
+function bestStreakAll() { return Math.max(0, ...dailyHabits().map(habitStreak)); }
+function mealPrepStatus(h) {
+  const done = state.habitLog.filter((x) => x.habitId === h.id && x.count > 0).map((x) => x.date).sort();
+  const last = done.length ? parseISO(done[done.length - 1]) : null;
+  const every = Number(h.everyDays) || 5;
+  const nextDue = last ? new Date(last.getTime() + every * DAY) : todayDate();
+  const daysToDue = Math.round((nextDue - todayDate()) / DAY);
+  return { last, nextDue, daysToDue, due: daysToDue <= 0 };
+}
+function goalPct(g) { const m = g.milestones || []; return m.length ? Math.round(m.filter((x) => x.done).length / m.length * 100) : 0; }
+
+// ── Personal · Daily Non-Negotiables ─────────────────────────────────────────
+VIEWS.dailyos = {
+  render() {
+    const hs = dailyHabits();
+    const score = dayScore();
+    const doneCount = hs.filter((h) => habitDone(h)).length;
+    const mp = everyNHabit();
+    const mps = mp ? mealPrepStatus(mp) : null;
+    const avg = avgScore();
+
+    return `
+    <div class="view">
+      <div class="view-head">
+        <div><div class="eyebrow">Personal Operating System</div><h1>Daily Non-Negotiables</h1></div>
+        <div class="meta">${esc(fmtLong(todayDate()))}</div>
+      </div>
+
+      <div class="grid cols-4 mb">
+        <div class="stat"><div class="k">Today's Score</div><div class="v ${score >= 90 ? "green" : score >= 60 ? "amber" : "red"}" style="font-size:36px">${score}</div><div class="sub">/ 100 · ${doneCount}/${hs.length} done</div></div>
+        <div class="stat"><div class="k">30-Day Consistency</div><div class="v ${avg >= 80 ? "green" : avg >= 60 ? "amber" : "red"}">${avg}<span style="font-size:16px">%</span></div><div class="sub">avg daily score</div></div>
+        <div class="stat"><div class="k">Best Streak</div><div class="v amber">${bestStreakAll()}<span style="font-size:16px">d</span></div><div class="sub">across habits</div></div>
+        <div class="stat"><div class="k">Meal Prep</div><div class="v ${mps ? (mps.due ? "amber" : "green") : ""}" style="font-size:20px">${mps ? (mps.due ? "Due now" : "in " + mps.daysToDue + "d") : "—"}</div><div class="sub">${mps && mps.last ? "last " + fmtDate(toISO(mps.last)) : "5-day cycle"}</div></div>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="panel">
+          <div class="panel-title"><span class="n">▸</span> Today's checklist — tap to complete</div>
+          ${hs.map(habitRow).join("")}
+          ${mp ? mealPrepRow(mp, mps) : ""}
+        </div>
+        <div class="panel">
+          <div class="panel-title"><span class="n">▸</span> Streaks &amp; 30-day consistency</div>
+          ${hs.map(habitBar).join("")}
+          <div class="mono muted mt" style="font-size:11px">🔥 = current streak · bar = last-30-day completion</div>
+        </div>
+      </div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-habit]").forEach((el) => el.addEventListener("click", () => { const h = state.habits.find((x) => x.id === el.dataset.habit); if (h) cycleHabit(h); }));
+    root.querySelectorAll("[data-mealprep]").forEach((el) => el.addEventListener("click", () => { const h = state.habits.find((x) => x.id === el.dataset.mealprep); if (h) DB.upsert("habitLog", { id: `${h.id}__${todayISO()}`, habitId: h.id, date: todayISO(), count: 1 }); toast("Meal prep logged — resets in 5 days"); }));
+  },
+};
+
+function habitRow(h) {
+  const cnt = habitCount(h.id), target = h.target || 1, done = cnt >= target, streak = habitStreak(h);
+  return `<div class="row ${done ? "done" : ""}" data-habit="${h.id}" style="cursor:pointer">
+    <div class="check ${done ? "done" : ""}">${done ? "✓" : (target > 1 ? cnt : "")}</div>
+    <div class="body"><div class="t">${esc(h.icon || "")} ${esc(h.name)}</div>
+      <div class="m">${target > 1 ? `<span class="mono">${cnt}/${target}</span>` : ""}${streak > 0 ? `<span class="tag amber">🔥 ${streak}d</span>` : ""}</div></div>
+  </div>`;
+}
+function mealPrepRow(h, s) {
+  return `<div class="row ${s.due ? "" : "done"}" data-mealprep="${h.id}" style="cursor:pointer">
+    <div class="check ${s.due ? "" : "done"}">${s.due ? "" : "✓"}</div>
+    <div class="body"><div class="t">${esc(h.icon || "")} ${esc(h.name)}</div>
+      <div class="m"><span class="tag ${s.due ? "amber" : "green"}">${s.due ? "Due now" : "next in " + s.daysToDue + "d"}</span></div></div>
+  </div>`;
+}
+function habitBar(h) {
+  const pct = habitPct(h), cls = pct >= 80 ? "high" : pct < 50 ? "low" : "";
+  return `<div class="fbar-row"><div class="fname">${esc(h.icon || "")} ${esc(h.name)}</div>
+    <div class="fbar-track"><div class="fbar-fill ${cls}" style="width:${pct}%"></div></div>
+    <div class="fbar-meta">${pct}% · 🔥${habitStreak(h)}</div></div>`;
+}
+
+// ── Personal · Goals ─────────────────────────────────────────────────────────
+VIEWS.goals = {
+  render() {
+    const goals = [...state.goals].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return `
+    <div class="view">
+      <div class="view-head"><div><div class="eyebrow">Long-Term Objectives</div><h1>Goals</h1></div>
+        <button class="btn primary" data-add-goal>+ Goal</button></div>
+      ${goals.length ? goals.map(goalCard).join("") : `<div class="empty">No goals yet.</div>`}
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-milestone]").forEach((el) => el.addEventListener("click", () => toggleMilestone(el.dataset.milestone)));
+    root.querySelectorAll("[data-edit-goal]").forEach((el) => el.addEventListener("click", () => editGoal(el.dataset.editGoal)));
+    root.querySelectorAll("[data-add-goal]").forEach((el) => el.addEventListener("click", () => editGoal()));
+    root.querySelectorAll("[data-add-milestone]").forEach((el) => el.addEventListener("click", () => addMilestone(el.dataset.addMilestone)));
+  },
+};
+
+function goalCard(g) {
+  const pct = goalPct(g), dd = g.targetDate ? daysUntil(g.targetDate) : null;
+  const done = (g.milestones || []).filter((m) => m.done).length;
+  return `
+  <div class="panel mb">
+    <div class="flex between wrap" style="align-items:flex-start">
+      <div><div class="panel-title" style="margin:0"><span class="n">◎</span> ${esc(g.title)}</div>
+        ${g.why ? `<div class="mono muted" style="font-size:11px;margin-top:4px;max-width:640px">${esc(g.why)}</div>` : ""}</div>
+      <div style="text-align:right"><div class="clock ${pct >= 100 ? "ok" : pct >= 50 ? "warn" : "late"}">${pct}%</div>
+        ${g.targetDate ? `<div class="mono muted" style="font-size:10px">${fmtDate(g.targetDate)}${dd != null ? " · " + dd + "d" : ""}</div>` : ""}</div>
+    </div>
+    <div class="bar mt"><span class="${pct >= 100 ? "ok" : ""}" style="width:${pct}%"></span></div>
+    <div class="mono muted" style="font-size:10px;margin-top:5px">${done}/${(g.milestones || []).length} milestones</div>
+    <div class="mt">${(g.milestones || []).map((m, i) => `<div class="row ${m.done ? "done" : ""}" style="margin-bottom:6px">
+      <div class="check ${m.done ? "done" : ""}" data-milestone="${g.id}:${i}" style="cursor:pointer">✓</div>
+      <div class="body"><div class="t" style="font-size:13px">${esc(m.t)}</div></div></div>`).join("")}</div>
+    <div class="flex mt" style="gap:8px"><button class="btn sm ghost" data-add-milestone="${g.id}">+ Milestone</button>
+      <button class="btn sm ghost" data-edit-goal="${g.id}">✎ Edit goal</button></div>
+  </div>`;
+}
+function toggleMilestone(ref) {
+  const [gid, idx] = ref.split(":"); const g = state.goals.find((x) => x.id === gid); if (!g) return;
+  const ms = [...(g.milestones || [])]; ms[Number(idx)] = { ...ms[Number(idx)], done: !ms[Number(idx)].done };
+  DB.upsert("goals", { ...g, milestones: ms });
+}
+function addMilestone(gid) {
+  const g = state.goals.find((x) => x.id === gid); if (!g) return;
+  const t = prompt("New milestone:"); if (!t) return;
+  DB.upsert("goals", { ...g, milestones: [...(g.milestones || []), { t, done: false }] });
+}
+function editGoal(id) {
+  const g = id ? state.goals.find((x) => x.id === id) : null;
+  formModal({
+    title: g ? "Edit Goal" : "New Goal",
+    fields: [
+      { key: "title", label: "Goal" },
+      { key: "why", label: "Why it matters", type: "textarea" },
+      { key: "targetDate", label: "Target date", type: "date" },
+    ],
+    values: g || {},
+    onSubmit: (v) => { DB.upsert("goals", { ...(g || { milestones: [] }), ...v }); toast("Saved"); },
+    onDelete: g ? () => DB.remove("goals", g.id) : null,
+  });
+}
+
+// ── Personal · Reading ───────────────────────────────────────────────────────
+VIEWS.reading = {
+  render() {
+    const books = [...state.books].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const reading = books.find((b) => b.status === "reading");
+    const finished = books.filter((b) => b.status === "finished");
+    const queue = books.filter((b) => b.status === "queued");
+    return `
+    <div class="view">
+      <div class="view-head"><div><div class="eyebrow">15 minutes a day</div><h1>Reading</h1></div>
+        <button class="btn primary" data-add-book>+ Book</button></div>
+
+      ${reading ? `<div class="panel mb" style="border-color:var(--amber-line);background:var(--amber-soft)">
+        <div class="panel-title"><span class="n">▸</span> Reading now</div>
+        <div style="font-size:20px;font-weight:700">${esc(reading.title)}</div>
+        <div class="mono muted" style="margin-top:2px">${esc(reading.author || "")}</div>
+        ${reading.note ? `<div class="muted mt" style="font-size:13px">${esc(reading.note)}</div>` : ""}
+        <div class="mt"><button class="btn primary sm" data-finish="${reading.id}">✓ Finished — recommend my next book</button></div>
+      </div>` : `<div class="panel mb"><div class="empty">No book in progress. Start the next one below. 👇</div></div>`}
+
+      <div class="grid cols-2">
+        <div class="panel">
+          <div class="panel-title"><span class="n">▸</span> Up next — ranked by impact</div>
+          ${queue.length ? queue.map((b, i) => `<div class="row"><div class="body">
+            <div class="t">${i === 0 ? "➡️ " : ""}${esc(b.title)}</div>
+            <div class="m"><span>${esc(b.author || "")}</span>${b.note ? `<span class="muted">${esc(b.note)}</span>` : ""}</div></div>
+            <div class="actions">${!reading && i === 0 ? `<button class="btn sm" data-start="${b.id}">Start</button>` : ""}<button class="icon-btn" data-edit-book="${b.id}">✎</button></div></div>`).join("") : `<div class="empty">Queue empty — add your next reads.</div>`}
+        </div>
+        <div class="panel">
+          <div class="panel-title"><span class="n">▸</span> Finished (${finished.length})</div>
+          ${finished.length ? finished.map((b) => `<div class="row"><div class="body"><div class="t">✓ ${esc(b.title)}</div><div class="m">${esc(b.author || "")}${b.finishedDate ? ` · ${fmtDate(b.finishedDate)}` : ""}</div></div></div>`).join("") : `<div class="empty">—</div>`}
+        </div>
+      </div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-finish]").forEach((el) => el.addEventListener("click", () => finishBook(el.dataset.finish)));
+    root.querySelectorAll("[data-start]").forEach((el) => el.addEventListener("click", () => { const b = state.books.find((x) => x.id === el.dataset.start); if (b) DB.upsert("books", { ...b, status: "reading" }); }));
+    root.querySelectorAll("[data-edit-book]").forEach((el) => el.addEventListener("click", () => editBook(el.dataset.editBook)));
+    root.querySelectorAll("[data-add-book]").forEach((el) => el.addEventListener("click", () => editBook()));
+  },
+};
+function finishBook(id) {
+  const b = state.books.find((x) => x.id === id); if (!b) return;
+  DB.upsert("books", { ...b, status: "finished", finishedDate: todayISO() });
+  const next = [...state.books].filter((x) => x.status === "queued").sort((a, b2) => (a.order ?? 0) - (b2.order ?? 0))[0];
+  if (next) { DB.upsert("books", { ...next, status: "reading" }); toast(`Nice. Next up: ${next.title}`); }
+  else toast("Finished! Add your next book.");
+}
+function editBook(id) {
+  const b = id ? state.books.find((x) => x.id === id) : null;
+  formModal({
+    title: b ? "Edit Book" : "Add Book",
+    fields: [
+      { key: "title", label: "Title" },
+      { key: "author", label: "Author" },
+      { key: "status", label: "Status", type: "select", options: [["queued", "Up next"], ["reading", "Reading now"], ["finished", "Finished"]] },
+      { key: "note", label: "Why / focus area" },
+    ],
+    values: b || { status: "queued", order: 99 },
+    onSubmit: (v) => { DB.upsert("books", { ...(b || { order: 99 }), ...v }); toast("Saved"); },
+    onDelete: b ? () => DB.remove("books", b.id) : null,
+  });
+}
 
 // ── 01 TODAY ─────────────────────────────────────────────────────────────────
 VIEWS.today = {
@@ -1697,6 +1943,7 @@ async function boot() {
   for (const col of COLLECTIONS) DB.subscribe(col, (list) => { state[col] = list; onDataChanged(); });
 
   try { await seedIfEmpty(); } catch (e) { console.warn("seed skipped", e); }
+  try { await seedPersonalOS(); } catch (e) { console.warn("personal OS seed skipped", e); }
   try { await upgradePortfolio(); } catch (e) { console.warn("portfolio upgrade skipped", e); }
   render();
 }

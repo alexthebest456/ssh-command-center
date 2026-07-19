@@ -139,6 +139,65 @@ export async function seedIfEmpty() {
   localStorage.setItem("sshcc:seeded", "1");
 }
 
+// ── Personal Operating System seed (habits, goals, reading) ───────────────────
+export async function seedPersonalOS() {
+  if (!DB.hasAny("habits")) {
+    const habits = [
+      { name: "Wake at 5:00 AM", icon: "⏰", cadence: "daily", target: 1, weight: 1, order: 1 },
+      { name: "Morning workout", icon: "💪", cadence: "daily", target: 1, weight: 1, order: 2 },
+      { name: "Eat healthy all day", icon: "🥗", cadence: "daily", target: 1, weight: 1, order: 3 },
+      { name: "No coffee (pre-workout ok)", icon: "🚫", cadence: "daily", target: 1, weight: 1, order: 4 },
+      { name: "Read 15 minutes", icon: "📖", cadence: "daily", target: 1, weight: 1, order: 5 },
+      { name: "Handle work priorities", icon: "🎯", cadence: "daily", target: 1, weight: 1, order: 6 },
+      { name: "Take Meatball out", icon: "🐕", cadence: "daily", target: 2, weight: 1, order: 7 },
+      { name: "Clean & organize space", icon: "🧹", cadence: "daily", target: 1, weight: 1, order: 8 },
+      { name: "Meal prep (next 5 days)", icon: "🍱", cadence: "everyN", everyDays: 5, target: 1, weight: 1, order: 9 },
+    ];
+    for (const h of habits) await DB.upsert("habits", { id: undefined, ...h });
+  }
+
+  if (!DB.hasAny("goals")) {
+    await DB.upsert("goals", {
+      id: "goal-contractor",
+      title: "California “B” — General Building Contractor's License",
+      why: "Legally build, remodel, and manage residential & commercial construction projects.",
+      targetDate: "2026-12-31",
+      order: 1,
+      milestones: [
+        { t: "Confirm eligibility — 4 yrs journey-level experience (last 10 yrs)", done: false },
+        { t: "Get experience verified & signed by a qualifier", done: false },
+        { t: "Submit application + fee to the CSLB", done: false },
+        { t: "Receive test-eligibility / scheduling notice", done: false },
+        { t: "Study — Law & Business (2–3 weeks)", done: false },
+        { t: "Study — Trade exam, General Building B (3–4 weeks)", done: false },
+        { t: "Score 80%+ on practice exams", done: false },
+        { t: "Pass the Law & Business exam", done: false },
+        { t: "Pass the Trade (B) exam", done: false },
+        { t: "Complete Live Scan fingerprinting", done: false },
+        { t: "Post $25,000 contractor bond + pay issuance fee", done: false },
+        { t: "License issued 🎉", done: false },
+      ],
+    });
+  }
+
+  if (!DB.hasAny("books")) {
+    const books = [
+      { title: "How to Win Friends & Influence People", author: "Dale Carnegie", status: "finished", order: 1 },
+      { title: "The Power of Now", author: "Eckhart Tolle", status: "finished", order: 2 },
+      { title: "The Richest Man in Babylon", author: "George S. Clason", status: "finished", order: 3 },
+      { title: "Atomic Habits", author: "James Clear", status: "reading", order: 4, note: "Builds the exact consistency-over-motivation system this dashboard is for." },
+      { title: "Can't Hurt Me", author: "David Goggins", status: "queued", order: 5, note: "Mental toughness / discipline." },
+      { title: "Extreme Ownership", author: "Jocko Willink & Leif Babin", status: "queued", order: 6, note: "Leadership + discipline." },
+      { title: "Never Split the Difference", author: "Chris Voss", status: "queued", order: 7, note: "Negotiation." },
+      { title: "The Psychology of Money", author: "Morgan Housel", status: "queued", order: 8, note: "Wealth + decision-making." },
+      { title: "Influence", author: "Robert Cialdini", status: "queued", order: 9, note: "Persuasion / sales psychology." },
+      { title: "Discipline Is Destiny", author: "Ryan Holiday", status: "queued", order: 10, note: "Self-discipline." },
+    ];
+    for (const b of books) await DB.upsert("books", { id: undefined, ...b });
+  }
+  localStorage.setItem("sshcc:pos-seeded", "1");
+}
+
 // One-time, safe upgrade: if the portfolio still consists solely of the OLD
 // placeholder seed (the 3 sample builds + 15 blank slots), replace it with the
 // real DoorLoop portfolio. If ANY property looks like real/edited data, this
