@@ -8,7 +8,7 @@ import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from ".
 const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
-  "habits", "habitLog", "goals", "books",
+  "habits", "habitLog", "goals", "books", "workouts",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -357,6 +357,31 @@ function mealPrepStatus(h) {
 }
 function goalPct(g) { const m = g.milestones || []; return m.length ? Math.round(m.filter((x) => x.done).length / m.length * 100) : 0; }
 
+// ── Workout split ─────────────────────────────────────────────────────────────
+const DOW_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function todaysWorkout() { return state.workouts.find((w) => w.dow === todayDate().getDay()) || null; }
+function workoutSplitPanel() {
+  const order = [1, 2, 3, 4, 5, 6, 0]; // Mon → Sun
+  const todayDow = todayDate().getDay();
+  return `<div class="panel mb">
+    <div class="panel-title"><span class="n">🏋</span> This Week — Workout Split</div>
+    ${order.map((d) => {
+      const w = state.workouts.find((x) => x.dow === d), isToday = d === todayDow;
+      return `<div class="row" data-workout="${d}" style="cursor:pointer;${isToday ? "border-color:var(--amber-line);background:var(--amber-soft)" : ""}">
+        <div class="body"><div class="t"><span class="mono" style="display:inline-block;min-width:38px;color:var(--ink-faint)">${DOW_NAMES[d].slice(0, 3)}</span> ${esc(w ? w.focus : "Rest")} ${isToday ? `<span class="tag amber">today</span>` : ""}</div></div>
+        <div class="actions"><button class="icon-btn">✎</button></div></div>`;
+    }).join("")}
+    <div class="mono muted mt" style="font-size:11px">Repeats weekly · tap any day to change it</div>
+  </div>`;
+}
+function editWorkout(dow) {
+  const w = state.workouts.find((x) => x.dow === Number(dow)) || { id: "wo-" + dow, dow: Number(dow) };
+  const focus = prompt(`${DOW_NAMES[Number(dow)]} workout focus:`, w.focus || "");
+  if (focus === null) return;
+  DB.upsert("workouts", { ...w, id: "wo-" + dow, dow: Number(dow), focus: focus.trim() });
+  toast("Split updated");
+}
+
 // ── Personal · My Day (unified morning command screen) ───────────────────────
 VIEWS.myday = {
   render() {
@@ -447,6 +472,8 @@ VIEWS.dailyos = {
         <div class="stat"><div class="k">Meal Prep</div><div class="v ${mps ? (mps.due ? "amber" : "green") : ""}" style="font-size:20px">${mps ? (mps.due ? "Due now" : "in " + mps.daysToDue + "d") : "—"}</div><div class="sub">${mps && mps.last ? "last " + fmtDate(toISO(mps.last)) : "5-day cycle"}</div></div>
       </div>
 
+      ${workoutSplitPanel()}
+
       <div class="grid cols-2">
         <div class="panel">
           <div class="panel-title"><span class="n">▸</span> Today's checklist — tap to complete</div>
@@ -464,14 +491,16 @@ VIEWS.dailyos = {
   mount(root) {
     root.querySelectorAll("[data-habit]").forEach((el) => el.addEventListener("click", () => { const h = state.habits.find((x) => x.id === el.dataset.habit); if (h) cycleHabit(h); }));
     root.querySelectorAll("[data-mealprep]").forEach((el) => el.addEventListener("click", () => { const h = state.habits.find((x) => x.id === el.dataset.mealprep); if (h) DB.upsert("habitLog", { id: `${h.id}__${todayISO()}`, habitId: h.id, date: todayISO(), count: 1 }); toast("Meal prep logged — resets in 5 days"); }));
+    root.querySelectorAll("[data-workout]").forEach((el) => el.addEventListener("click", () => editWorkout(el.dataset.workout)));
   },
 };
 
 function habitRow(h) {
   const cnt = habitCount(h.id), target = h.target || 1, done = cnt >= target, streak = habitStreak(h);
+  const wo = /workout/i.test(h.name) ? todaysWorkout() : null;
   return `<div class="row ${done ? "done" : ""}" data-habit="${h.id}" style="cursor:pointer">
     <div class="check ${done ? "done" : ""}">${done ? "✓" : (target > 1 ? cnt : "")}</div>
-    <div class="body"><div class="t">${esc(h.icon || "")} ${esc(h.name)}</div>
+    <div class="body"><div class="t">${esc(h.icon || "")} ${esc(h.name)}${wo ? ` <span class="tag green">🏋 ${esc(wo.focus)}</span>` : ""}</div>
       <div class="m">${h.time ? `<span class="mono">${esc(h.time)}</span>` : ""}${target > 1 ? `<span class="mono">${cnt}/${target}</span>` : ""}${streak > 0 ? `<span class="tag amber">🔥 ${streak}d</span>` : ""}</div></div>
   </div>`;
 }

@@ -196,6 +196,20 @@ export async function seedPersonalOS() {
     ];
     for (const b of books) await DB.upsert("books", { id: undefined, ...b });
   }
+  if (!DB.hasAny("workouts")) {
+    // Weekly training split (dow: 0=Sun … 6=Sat). Repeats every week; edit any day in-app.
+    const split = [
+      { dow: 0, focus: "Legs" },
+      { dow: 1, focus: "Chest & Triceps" },
+      { dow: 2, focus: "Back & Abs" },
+      { dow: 3, focus: "Legs" },
+      { dow: 4, focus: "Shoulders + light Chest" },
+      { dow: 5, focus: "Biceps + light Back" },
+      { dow: 6, focus: "Legs" },
+    ];
+    for (const w of split) await DB.upsert("workouts", { id: "wo-" + w.dow, ...w });
+  }
+
   localStorage.setItem("sshcc:pos-seeded", "1");
 }
 
