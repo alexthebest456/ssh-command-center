@@ -185,13 +185,14 @@ export async function seedPersonalOS() {
       { title: "How to Win Friends & Influence People", author: "Dale Carnegie", status: "finished", order: 1 },
       { title: "The Power of Now", author: "Eckhart Tolle", status: "finished", order: 2 },
       { title: "The Richest Man in Babylon", author: "George S. Clason", status: "finished", order: 3 },
-      { title: "Atomic Habits", author: "James Clear", status: "reading", order: 4, note: "Builds the exact consistency-over-motivation system this dashboard is for." },
-      { title: "Can't Hurt Me", author: "David Goggins", status: "queued", order: 5, note: "Mental toughness / discipline." },
+      { title: "Atomic Habits", author: "James Clear", status: "finished", order: 4 },
+      { title: "Can't Hurt Me", author: "David Goggins", status: "reading", order: 5, note: "Mental toughness & discipline — the perfect follow-on to Atomic Habits: now that you have the system, this forges the will to run it on the hard days." },
       { title: "Extreme Ownership", author: "Jocko Willink & Leif Babin", status: "queued", order: 6, note: "Leadership + discipline." },
       { title: "Never Split the Difference", author: "Chris Voss", status: "queued", order: 7, note: "Negotiation." },
       { title: "The Psychology of Money", author: "Morgan Housel", status: "queued", order: 8, note: "Wealth + decision-making." },
       { title: "Influence", author: "Robert Cialdini", status: "queued", order: 9, note: "Persuasion / sales psychology." },
       { title: "Discipline Is Destiny", author: "Ryan Holiday", status: "queued", order: 10, note: "Self-discipline." },
+      { title: "The Score Takes Care of Itself", author: "Bill Walsh", status: "queued", order: 11, note: "Leadership by standards — the CEO operating-system mindset." },
     ];
     for (const b of books) await DB.upsert("books", { id: undefined, ...b });
   }
