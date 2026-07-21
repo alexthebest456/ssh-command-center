@@ -143,17 +143,17 @@ export async function seedIfEmpty() {
 export async function seedPersonalOS() {
   if (!DB.hasAny("habits")) {
     const habits = [
-      { name: "Wake at 5:00 AM", icon: "⏰", cadence: "daily", target: 1, weight: 1, order: 1, time: "5:00 AM" },
-      { name: "Morning workout", icon: "💪", cadence: "daily", target: 1, weight: 1, order: 2, time: "5:30 AM" },
-      { name: "Clean & organize space", icon: "🧹", cadence: "daily", target: 1, weight: 1, order: 3, time: "6:30 AM" },
-      { name: "Eat healthy all day", icon: "🥗", cadence: "daily", target: 1, weight: 1, order: 4 },
-      { name: "No coffee (pre-workout ok)", icon: "🚫", cadence: "daily", target: 1, weight: 1, order: 5 },
-      { name: "Handle work priorities", icon: "🎯", cadence: "daily", target: 1, weight: 1, order: 6 },
-      { name: "Take Meatball out", icon: "🐕", cadence: "daily", target: 2, weight: 1, order: 7 },
-      { name: "Read 15 minutes", icon: "📖", cadence: "daily", target: 1, weight: 1, order: 8, time: "9:00 PM" },
-      { name: "Meal prep (next 5 days)", icon: "🍱", cadence: "everyN", everyDays: 5, target: 1, weight: 1, order: 9 },
+      { id: "hab-wake", name: "Wake at 5:00 AM", icon: "⏰", cadence: "daily", target: 1, weight: 1, order: 1, time: "5:00 AM" },
+      { id: "hab-workout", name: "Morning workout", icon: "💪", cadence: "daily", target: 1, weight: 1, order: 2, time: "5:30 AM" },
+      { id: "hab-clean", name: "Clean & organize space", icon: "🧹", cadence: "daily", target: 1, weight: 1, order: 3, time: "6:30 AM" },
+      { id: "hab-eat", name: "Eat healthy all day", icon: "🥗", cadence: "daily", target: 1, weight: 1, order: 4 },
+      { id: "hab-nocoffee", name: "No coffee (pre-workout ok)", icon: "🚫", cadence: "daily", target: 1, weight: 1, order: 5 },
+      { id: "hab-work", name: "Handle work priorities", icon: "🎯", cadence: "daily", target: 1, weight: 1, order: 6 },
+      { id: "hab-meatball", name: "Take Meatball out", icon: "🐕", cadence: "daily", target: 2, weight: 1, order: 7 },
+      { id: "hab-read", name: "Read 15 minutes", icon: "📖", cadence: "daily", target: 1, weight: 1, order: 8, time: "9:00 PM" },
+      { id: "hab-mealprep", name: "Meal prep (next 5 days)", icon: "🍱", cadence: "everyN", everyDays: 5, target: 1, weight: 1, order: 9 },
     ];
-    for (const h of habits) await DB.upsert("habits", { id: undefined, ...h });
+    for (const h of habits) await DB.upsert("habits", h);
   }
 
   if (!DB.hasAny("goals")) {
@@ -182,19 +182,20 @@ export async function seedPersonalOS() {
 
   if (!DB.hasAny("books")) {
     const books = [
-      { title: "How to Win Friends & Influence People", author: "Dale Carnegie", status: "finished", order: 1 },
-      { title: "The Power of Now", author: "Eckhart Tolle", status: "finished", order: 2 },
-      { title: "The Richest Man in Babylon", author: "George S. Clason", status: "finished", order: 3 },
-      { title: "Atomic Habits", author: "James Clear", status: "finished", order: 4 },
-      { title: "Can't Hurt Me", author: "David Goggins", status: "finished", order: 5 },
-      { title: "Extreme Ownership", author: "Jocko Willink & Leif Babin", status: "reading", order: 6, note: "Leadership + radical accountability — turns the personal discipline of Goggins into how you run people, jobs, and vendors. Directly applicable to your builds." },
-      { title: "Never Split the Difference", author: "Chris Voss", status: "queued", order: 7, note: "Negotiation." },
-      { title: "The Psychology of Money", author: "Morgan Housel", status: "queued", order: 8, note: "Wealth + decision-making." },
-      { title: "Influence", author: "Robert Cialdini", status: "queued", order: 9, note: "Persuasion / sales psychology." },
-      { title: "Discipline Is Destiny", author: "Ryan Holiday", status: "queued", order: 10, note: "Self-discipline." },
-      { title: "The Score Takes Care of Itself", author: "Bill Walsh", status: "queued", order: 11, note: "Leadership by standards — the CEO operating-system mindset." },
+      { id: "book-htwf", title: "How to Win Friends & Influence People", author: "Dale Carnegie", status: "finished", order: 1 },
+      { id: "book-power-now", title: "The Power of Now", author: "Eckhart Tolle", status: "finished", order: 2 },
+      { id: "book-richest-babylon", title: "The Richest Man in Babylon", author: "George S. Clason", status: "finished", order: 3 },
+      { id: "book-atomic-habits", title: "Atomic Habits", author: "James Clear", status: "finished", order: 4 },
+      { id: "book-cant-hurt-me", title: "Can't Hurt Me", author: "David Goggins", status: "finished", order: 5 },
+      { id: "book-the-one-thing", title: "The One Thing", author: "Gary Keller & Jay Papasan", status: "reading", order: 6, note: "Focus & prioritization — the single most important thing that makes everything else easier or unnecessary." },
+      { id: "book-extreme-ownership", title: "Extreme Ownership", author: "Jocko Willink & Leif Babin", status: "queued", order: 7, note: "Leadership + radical accountability." },
+      { id: "book-never-split", title: "Never Split the Difference", author: "Chris Voss", status: "queued", order: 8, note: "Negotiation." },
+      { id: "book-psych-money", title: "The Psychology of Money", author: "Morgan Housel", status: "queued", order: 9, note: "Wealth + decision-making." },
+      { id: "book-influence", title: "Influence", author: "Robert Cialdini", status: "queued", order: 10, note: "Persuasion / sales psychology." },
+      { id: "book-discipline-destiny", title: "Discipline Is Destiny", author: "Ryan Holiday", status: "queued", order: 11, note: "Self-discipline." },
+      { id: "book-score-itself", title: "The Score Takes Care of Itself", author: "Bill Walsh", status: "queued", order: 12, note: "Leadership by standards." },
     ];
-    for (const b of books) await DB.upsert("books", { id: undefined, ...b });
+    for (const b of books) await DB.upsert("books", b);
   }
   if (!DB.hasAny("workouts")) {
     // Weekly training split (dow: 0=Sun … 6=Sat). Repeats every week; edit any day in-app.
