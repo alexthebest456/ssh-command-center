@@ -28,6 +28,37 @@
   --sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
 }
 
+/* ── Light (bright) theme — flip via [data-theme="light"] on <html> ─────────── */
+:root[data-theme="light"] {
+  --navy-900: #eef1f8;
+  --navy-850: #ffffff;
+  --navy-800: #ffffff;
+  --navy-700: #eef2f9;
+  --navy-600: #e2e8f4;
+  --line: rgba(20, 40, 80, 0.13);
+  --line-strong: rgba(20, 40, 80, 0.24);
+  --grid: rgba(50, 80, 140, 0.05);
+  --ink: #0f1c30;
+  --ink-dim: #41506a;
+  --ink-faint: #6d7c95;
+  --amber: #b26f08;
+  --amber-soft: rgba(178, 111, 8, 0.13);
+  --amber-line: rgba(178, 111, 8, 0.42);
+  --green: #1c9550;
+  --red: #cf3446;
+  --blue: #2668cc;
+}
+:root[data-theme="light"] body {
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    radial-gradient(1200px 700px at 78% -10%, rgba(120, 150, 210, 0.12), transparent 60%);
+}
+:root[data-theme="light"] .panel { background: #ffffff; box-shadow: 0 1px 3px rgba(20, 40, 80, 0.06); }
+:root[data-theme="light"] #sidebar { background: linear-gradient(180deg, #ffffff, #f3f6fc); }
+:root[data-theme="light"] .btn.primary { color: #ffffff; }
+:root[data-theme="light"] .modal { box-shadow: 0 30px 80px rgba(20, 40, 80, 0.25); }
+
 * { box-sizing: border-box; }
 
 html, body {

@@ -2020,7 +2020,19 @@ function hydrateFromCache() {
   for (const col of COLLECTIONS) { try { state[col] = DB.getAll(col); } catch { state[col] = []; } }
 }
 
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  const b = $("#themeToggle");
+  if (b) { b.textContent = t === "light" ? "🌙" : "☀"; b.title = t === "light" ? "Switch to dark" : "Switch to bright"; }
+}
+
 async function boot() {
+  applyTheme(localStorage.getItem("sshcc:theme") || "light");
+  $("#themeToggle")?.addEventListener("click", () => {
+    const next = (document.documentElement.getAttribute("data-theme") === "light") ? "dark" : "light";
+    localStorage.setItem("sshcc:theme", next);
+    applyTheme(next);
+  });
   $("#menuBtn")?.addEventListener("click", openSidebar);
   $("#scrim")?.addEventListener("click", closeSidebar);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); closeSidebar(); } });
