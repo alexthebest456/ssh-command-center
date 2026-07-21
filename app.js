@@ -747,7 +747,7 @@ function eventRow(e) {
     </div>
   </div>`;
 }
-function eventTagCls(t) { return { maintenance: "blue", "lease-end": "red", vacancy: "amber", inspection: "green" }[t] || ""; }
+function eventTagCls(t) { return { build: "violet", maintenance: "blue", "lease-end": "red", vacancy: "amber", inspection: "green" }[t] || ""; }
 
 // ── 02 CAPTURE ───────────────────────────────────────────────────────────────
 VIEWS.capture = {
@@ -1138,7 +1138,7 @@ function handlePhotoUpload(propId, files) {
 }
 
 // ── 06 PROPERTY CALENDAR (NEW) ───────────────────────────────────────────────
-const EVENT_TYPES = ["maintenance", "lease-end", "vacancy", "inspection", "other"];
+const EVENT_TYPES = ["build", "maintenance", "lease-end", "vacancy", "inspection", "other"];
 VIEWS.calendar = {
   render() {
     const first = calMonth;
@@ -1166,6 +1166,7 @@ VIEWS.calendar = {
             <button class="btn sm" data-cal="1">›</button>
             <button class="btn sm ghost" data-cal="0">Today</button></div>
           <div class="flex wrap mono" style="font-size:10px;gap:12px">
+            <span><span class="tag violet">build</span></span>
             <span><span class="tag blue">maintenance</span></span>
             <span><span class="tag red">lease-end</span></span>
             <span><span class="tag amber">vacancy</span></span>

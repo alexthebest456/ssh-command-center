@@ -393,6 +393,7 @@ label.field .lab {
 .tag.green { color: var(--green); border-color: rgba(75,210,143,0.4); }
 .tag.red { color: var(--red); border-color: rgba(255,107,107,0.4); }
 .tag.blue { color: var(--blue); border-color: rgba(86,168,255,0.4); }
+.tag.violet { color: #a78bfa; border-color: rgba(167,139,250,0.45); background: rgba(167,139,250,0.12); }
 
 .pill-due { font-family: var(--mono); font-size: 11px; }
 .pill-due.overdue { color: var(--red); }
@@ -475,6 +476,7 @@ label.field .lab {
 .cal-ev.lease-end { border-color: var(--red); }
 .cal-ev.vacancy { border-color: var(--amber); }
 .cal-ev.inspection { border-color: var(--green); }
+.cal-ev.build { border-color: #a78bfa; }
 
 /* ── Modal ─────────────────────────────────────────────────────────────────── */
 .modal-back {
