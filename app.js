@@ -144,6 +144,7 @@ const NAV_GROUPS = [
     { id: "content", label: "Content Calendar" },
   ]},
   { title: "Review", items: [
+    { id: "performance", label: "Portfolio Performance" },
     { id: "scorecard", label: "Monthly Scorecard" },
     { id: "weekly", label: "Weekly Review" },
     { id: "productivity", label: "Productivity" },
@@ -1441,6 +1442,142 @@ VIEWS.backlog = {
   },
   mount(root) { wireTaskRows(root); root.querySelectorAll("[data-add-task]").forEach((el) => el.addEventListener("click", () => editTaskPrefill({ due: "" }))); },
 };
+
+// ── Portfolio Performance (6mo / 1yr / 5yr returns + projections) ────────────
+function getAssumptions() {
+  const m = state.meta.find((x) => x.id === "assumptions");
+  return { rentGrowthPct: Number(m?.rentGrowthPct ?? 4), avgUnitRent: Number(m?.avgUnitRent ?? 2500) };
+}
+function propMonthlyRent(pid) { return state.leases.filter((l) => l.propertyId === pid).reduce((a, l) => a + (Number(l.currentRent) || 0), 0); }
+function portfolioRent() { return state.leases.reduce((a, l) => a + (Number(l.currentRent) || 0), 0); }
+function currentDoors() { return state.properties.reduce((a, p) => a + (Number(p.units) || 0), 0); }
+
+function projectIncome(monthsAhead) {
+  const a = getAssumptions();
+  const yrs = monthsAhead / 12;
+  const base = portfolioRent() * Math.pow(1 + a.rentGrowthPct / 100, yrs);
+  const H = addMonths(todayDate(), monthsAhead);
+  let newUnits = 0;
+  for (const p of state.properties) {
+    if (p.plannedUnits && p.unitsReadyDate && parseISO(p.unitsReadyDate) <= H) newUnits += Number(p.plannedUnits) || 0;
+  }
+  const newIncome = newUnits * a.avgUnitRent;
+  return { monthly: Math.round(base + newIncome), newUnits, doors: currentDoors() + newUnits };
+}
+
+function propReturns(p) {
+  const rent = propMonthlyRent(p.id);
+  const exp = Number(p.monthlyExpenses) || 0;
+  const noiA = (rent - exp) * 12;
+  const debt = Number(p.loanPayment) || 0;
+  const cfM = rent - exp - debt;
+  const price = Number(p.purchasePrice) || 0;
+  const invested = Number(p.cashInvested) || 0;
+  const val = Number(p.currentValue) || 0, bal = Number(p.loanBalance) || 0;
+  return {
+    rent, exp, debt, noiA, cfM, cfA: cfM * 12,
+    cap: price ? (noiA / price) * 100 : null,
+    coc: invested ? (cfM * 12 / invested) * 100 : null,
+    equity: (val || bal) ? val - bal : null,
+    hasFin: !!(price || exp || debt || val),
+  };
+}
+
+VIEWS.performance = {
+  render() {
+    const a = getAssumptions();
+    const rentNow = portfolioRent();
+    const proj6 = projectIncome(6), proj12 = projectIncome(12), proj60 = projectIncome(60);
+    // portfolio returns roll-up (only from properties with financials entered)
+    const rets = state.properties.map((p) => ({ p, r: propReturns(p) }));
+    const withFin = rets.filter((x) => x.r.hasFin);
+    const totCfM = withFin.reduce((s, x) => s + x.r.cfM, 0);
+    const totNoiA = withFin.reduce((s, x) => s + x.r.noiA, 0);
+    const totPrice = withFin.reduce((s, x) => s + (Number(x.p.purchasePrice) || 0), 0);
+    const totEquity = rets.reduce((s, x) => s + (x.r.equity || 0), 0);
+    const portCap = totPrice ? (totNoiA / totPrice) * 100 : null;
+    // rentals with rent, sorted by rent desc
+    const rows = rets.filter((x) => x.r.rent > 0 || x.r.hasFin).sort((x, y) => y.r.rent - x.r.rent);
+
+    const projCol = (label, pr) => `<div class="stat"><div class="k">${label}</div>
+      <div class="v" style="font-size:20px">${money0(pr.monthly)}</div>
+      <div class="sub">${money0(pr.monthly * 12)}/yr · ${pr.doors} doors</div></div>`;
+
+    return `
+    <div class="view">
+      <div class="view-head">
+        <div><div class="eyebrow">Portfolio</div><h1>Performance</h1></div>
+        <div class="mono muted" style="font-size:11px">rent +${a.rentGrowthPct}%/yr · new unit ${money0(a.avgUnitRent)}/mo <button class="btn sm ghost" data-edit-assump>✎</button></div>
+      </div>
+
+      <div class="panel mb">
+        <div class="panel-title"><span class="n">▸</span> Income projection — where the portfolio is headed</div>
+        <div class="grid cols-4">
+          ${projCol("Now", { monthly: rentNow, doors: currentDoors() })}
+          ${projCol("+6 months", proj6)}
+          ${projCol("+1 year", proj12)}
+          ${projCol("+5 years", proj60)}
+        </div>
+        <div class="mono muted mt" style="font-size:11px">Grows current rent at +${a.rentGrowthPct}%/yr and adds ${money0(a.avgUnitRent)}/mo per ADU/unit as each build leases up. 5-yr rent roll ≈ ${money0(proj60.monthly)}/mo.</div>
+      </div>
+
+      <div class="grid cols-4 mb">
+        <div class="stat"><div class="k">Gross Rent (now)</div><div class="v green" style="font-size:22px">${money0(rentNow)}</div><div class="sub">/mo · ${money0(rentNow * 12)}/yr</div></div>
+        <div class="stat"><div class="k">Cash Flow</div><div class="v ${totCfM >= 0 ? "green" : "red"}" style="font-size:22px">${withFin.length ? money0(totCfM) : "—"}</div><div class="sub">${withFin.length ? "/mo (entered props)" : "add financials"}</div></div>
+        <div class="stat"><div class="k">Portfolio Cap</div><div class="v amber" style="font-size:22px">${portCap != null ? portCap.toFixed(1) + "%" : "—"}</div><div class="sub">NOI / price</div></div>
+        <div class="stat"><div class="k">Equity</div><div class="v" style="font-size:22px">${totEquity ? money0(totEquity) : "—"}</div><div class="sub">value − loans</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span class="n">▸</span> Returns by property <span class="mono muted" style="margin-left:auto;font-weight:400">tap a row to add price / loan / expenses</span></div>
+        <div class="fbar-row" style="grid-template-columns:1.4fr 1fr 1fr 0.8fr 0.9fr;font-family:var(--mono);font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;border:none;margin-bottom:4px">
+          <div>Property</div><div>Rent/mo</div><div>Cash flow/mo</div><div>Cap</div><div>CoC</div>
+        </div>
+        ${rows.length ? rows.map(({ p, r }) => `<div class="fbar-row" data-fin="${p.id}" style="grid-template-columns:1.4fr 1fr 1fr 0.8fr 0.9fr;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:6px">
+          <div class="fname" title="${esc(p.name)}">${esc(p.name)}</div>
+          <div class="mono">${r.rent ? money0(r.rent) : "—"}</div>
+          <div class="mono ${r.hasFin ? (r.cfM >= 0 ? "" : "") : ""}" style="color:${r.hasFin ? (r.cfM >= 0 ? "var(--green)" : "var(--red)") : "var(--ink-faint)"}">${r.hasFin ? money0(r.cfM) : "add +"}</div>
+          <div class="mono">${r.cap != null ? r.cap.toFixed(1) + "%" : "—"}</div>
+          <div class="mono">${r.coc != null ? r.coc.toFixed(1) + "%" : "—"}</div>
+        </div>`).join("") : `<div class="empty">No rent data yet.</div>`}
+      </div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-fin]").forEach((el) => el.addEventListener("click", () => editFinancials(el.dataset.fin)));
+    root.querySelectorAll("[data-edit-assump]").forEach((el) => el.addEventListener("click", () => editAssumptions()));
+  },
+};
+
+function editFinancials(pid) {
+  const p = state.properties.find((x) => x.id === pid); if (!p) return;
+  formModal({
+    title: "Financials — " + p.name,
+    sub: `Rent (${money0(propMonthlyRent(pid))}/mo) comes from DoorLoop. Enter the rest for returns.`,
+    fields: [
+      { key: "purchasePrice", label: "Purchase price ($)", type: "number" },
+      { key: "currentValue", label: "Current value ($)", type: "number" },
+      { key: "loanBalance", label: "Loan balance ($)", type: "number" },
+      { key: "loanPayment", label: "Loan payment ($/mo, P&I)", type: "number" },
+      { key: "monthlyExpenses", label: "Operating expenses ($/mo — tax, ins, maint, mgmt)", type: "number" },
+      { key: "cashInvested", label: "Cash invested / down payment ($)", type: "number" },
+    ],
+    values: p,
+    onSubmit: (v) => { DB.upsert("properties", { ...p, ...v }); toast("Financials saved"); },
+  });
+}
+function editAssumptions() {
+  const a = getAssumptions();
+  formModal({
+    title: "Projection assumptions",
+    fields: [
+      { key: "rentGrowthPct", label: "Annual rent growth (%)", type: "number", step: "0.1" },
+      { key: "avgUnitRent", label: "Avg rent per new ADU/unit ($/mo)", type: "number" },
+    ],
+    values: a,
+    onSubmit: (v) => { DB.upsert("meta", { id: "assumptions", rentGrowthPct: Number(v.rentGrowthPct), avgUnitRent: Number(v.avgUnitRent) }); toast("Assumptions updated"); },
+  });
+}
 
 // ── 08 MONTHLY SCORECARD ─────────────────────────────────────────────────────
 VIEWS.scorecard = {
