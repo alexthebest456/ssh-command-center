@@ -207,6 +207,62 @@ function maintenanceTasks() {
   return openTasks().filter(isMaintenance).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
+// ── "The ONE Thing" — importance-ranked daily focus ──────────────────────────
+function taskScore(t) {
+  let s = (t.priority || 0) * 100; // importance dominates
+  const n = daysUntil(t.due);
+  if (n !== null) { if (n < 0) s += 80 + Math.min(40, -n); else if (n <= 1) s += 60; else if (n <= 3) s += 40; else if (n <= 7) s += 20; else s += 8; }
+  const age = t.createdAt ? (Date.now() - t.createdAt) / DAY : 0; // nothing rots
+  s += Math.min(20, age * 0.4);
+  return s;
+}
+function rankedTasks() { return openTasks().slice().sort((a, b) => taskScore(b) - taskScore(a)); }
+function focusPin() { try { const f = JSON.parse(localStorage.getItem("sshcc:focus") || "null"); return (f && f.date === todayISO()) ? f.taskId : null; } catch { return null; } }
+function setFocusPin(id) { localStorage.setItem("sshcc:focus", JSON.stringify({ date: todayISO(), taskId: id })); }
+function oneThingTask() {
+  const pid = focusPin();
+  const pinned = pid && state.tasks.find((t) => t.id === pid && t.status !== "done");
+  return pinned || rankedTasks()[0] || null;
+}
+function whyOneThing(t) {
+  if (!t) return "";
+  const n = daysUntil(t.due);
+  if (n !== null && n < 0) return `${-n}d overdue`;
+  if (n === 0) return "Due today";
+  if (t.priority >= 2) return "High priority";
+  if (n !== null && n <= 3) return `Due in ${n}d`;
+  if (t.priority >= 1) return "Important";
+  return "Top of your list";
+}
+function oneThingCard() {
+  const one = oneThingTask();
+  if (!one) return `<div class="panel mb"><div class="panel-title"><span class="n">🎯</span> Today's ONE Thing</div><div class="empty">No open tasks — clear runway. ✈ Add one to focus on.</div></div>`;
+  const p = propName(one.propertyId), dm = dueMeta(one.due);
+  return `<div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
+    <div class="flex between wrap"><div class="panel-title" style="margin:0"><span class="n">🎯</span> Today's ONE Thing</div>
+      <span class="tag amber">${esc(whyOneThing(one))}</span></div>
+    <div style="font-size:21px;font-weight:700;line-height:1.25;margin-top:8px">${esc(one.title)}</div>
+    <div class="mono muted" style="margin-top:5px;font-size:12px">${p ? "▦ " + esc(p) : ""}${p && dm ? " · " : ""}${dm ? dm.text : (p ? "" : "no due date")}</div>
+    ${one.notes ? `<div class="muted mt" style="font-size:13px;white-space:pre-wrap">${esc(one.notes)}</div>` : ""}
+    <div class="flex mt" style="gap:8px"><button class="btn primary sm" data-one-done="${one.id}">✓ Done — load next</button>
+      <button class="btn sm ghost" data-one-edit="${one.id}">✎ Details</button></div>
+  </div>`;
+}
+function focusRow(t) {
+  const dm = dueMeta(t.due), p = propName(t.propertyId);
+  return `<div class="row">
+    <div class="check ${t.status === "done" ? "done" : ""}" data-toggle="${t.id}">✓</div>
+    <div class="body"><div class="t">${esc(t.title)}</div>
+      <div class="m">${t.priority >= 2 ? `<span class="tag amber">high</span>` : t.priority >= 1 ? `<span class="tag">med</span>` : ""}${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}${p ? `<span>▦ ${esc(p)}</span>` : ""}</div></div>
+    <div class="actions"><button class="icon-btn" data-set-focus="${t.id}" title="Make this today's ONE Thing">➤</button></div>
+  </div>`;
+}
+function focusQueueHTML() {
+  const one = oneThingTask();
+  const q = rankedTasks().filter((t) => !one || t.id !== one.id).slice(0, 7);
+  return q.length ? q.map(focusRow).join("") : `<div class="empty">Nothing else queued. 🎯</div>`;
+}
+
 // ── Lease / rent-increase math ────────────────────────────────────────────────
 // Default cap follows California AB 1482: max annual increase = 5% + regional
 // CPI, capped at 10%. Both the CPI and the cap are editable per lease.
@@ -411,6 +467,8 @@ VIEWS.myday = {
         <div class="stat"><div class="k">Priorities</div><div class="v ${tasks.length ? "amber" : "green"}">${tasks.length}</div><div class="sub">tasks due today</div></div>
       </div>
 
+      ${oneThingCard()}
+
       <div class="grid cols-2">
         <div class="panel">
           <div class="panel-title"><span class="n">☀</span> Non-Negotiables — your schedule</div>
@@ -418,9 +476,10 @@ VIEWS.myday = {
           ${mp ? mealPrepRow(mp, mps) : ""}
         </div>
         <div class="panel">
-          <div class="flex between"><div class="panel-title" style="margin:0"><span class="n">✓</span> Today's Priorities</div>
+          <div class="flex between"><div class="panel-title" style="margin:0"><span class="n">✓</span> Focus Queue — by importance</div>
             <button class="btn sm" data-add-today>+ Task</button></div>
-          <div class="mt">${tasks.length ? tasks.map(taskRow).join("") : `<div class="empty">No tasks due today. 🎯</div>`}</div>
+          <div class="mt">${focusQueueHTML()}</div>
+          <div class="mono muted mt" style="font-size:11px">Tap ➤ to make any task today's ONE Thing.</div>
         </div>
       </div>
 
@@ -446,6 +505,9 @@ VIEWS.myday = {
     root.querySelectorAll("[data-add-today]").forEach((el) => el.addEventListener("click", () => editTaskPrefill({ due: todayISO() })));
     root.querySelectorAll("[data-event]").forEach((el) => el.addEventListener("click", () => editEvent(el.dataset.event)));
     root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
+    root.querySelectorAll("[data-one-done]").forEach((el) => el.addEventListener("click", () => { toggleTask(el.dataset.oneDone); localStorage.removeItem("sshcc:focus"); toast("Done. Next one loaded. 🎯"); }));
+    root.querySelectorAll("[data-one-edit]").forEach((el) => el.addEventListener("click", () => editTask(el.dataset.oneEdit)));
+    root.querySelectorAll("[data-set-focus]").forEach((el) => el.addEventListener("click", () => { setFocusPin(el.dataset.setFocus); render(); toast("Set as today's ONE Thing 🎯"); }));
   },
 };
 
