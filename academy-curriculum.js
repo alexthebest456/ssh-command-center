@@ -32,7 +32,10 @@
 import { DB } from "./db.js";
 
 // Bump this whenever the curriculum below changes so every device re-syncs.
-export const CURRICULUM_VERSION = "cslb-official-v2";
+export const CURRICULUM_VERSION = "cslb-official-v3";
+
+// Verified facts about the two exams (from the official CSLB study guides).
+export const EXAM_FACTS = "Both exams are closed-book, multiple-choice (4 options, one BEST answer). A calculator is provided; some questions require math. No penalty for guessing.";
 
 // The two reference texts this program reads from. Each section below carries a
 // `read` assignment pointing to the exact chapter(s) to open when you get there.
@@ -242,6 +245,7 @@ const SECTIONS = [
   {
     sec: 8, part: "Trade", weight: 15, title: "Planning & Estimating",
     read: "Ching, Building Construction Illustrated — Ch. 1 The Building Site & Ch. 2 The Building (loads, structural overview). Pair with any plan-reading primer for the drawing-set questions.",
+    topics: ["Scope of work & code compliance", "Design & construction error identification", "Shop drawings, plans & specifications", "Field inspection performance", "Project coordination", "Cost estimation — materials, equipment & labor"],
     lessons: [
       { key: "reading-plans",
         title: "Reading plans & specifications",
@@ -268,6 +272,7 @@ const SECTIONS = [
   {
     sec: 9, part: "Trade", weight: 20, title: "Framing & Structural Components",
     read: "Ching, Building Construction Illustrated — Ch. 3 Foundation Systems, Ch. 4 Floor Systems, Ch. 5 Wall Systems, Ch. 6 Roof Systems. The visual core of the trade exam.",
+    topics: ["Subfloor & wall framing", "Roof framing", "Seismic hardware requirements & installation", "Siding & stucco", "Decks & stairs"],
     lessons: [
       { key: "foundations-concrete",
         title: "Foundations & concrete",
@@ -304,6 +309,7 @@ const SECTIONS = [
   {
     sec: 10, part: "Trade", weight: 30, title: "Core Trades",
     read: "Ching, Building Construction Illustrated — Ch. 1 The Building Site (site/earthwork), Ch. 7 Moisture & Thermal Protection, Ch. 11 Mechanical & Electrical Systems. Biggest section (30%) — spend the most time here.",
+    topics: ["Plumbing", "Electrical", "HVAC", "Concrete", "Earthwork & surveying", "Insulation, acoustical & weatherproofing", "Roofing"],
     lessons: [
       { key: "site-earthwork",
         title: "Site work, grading & drainage",
@@ -350,6 +356,7 @@ const SECTIONS = [
   {
     sec: 11, part: "Trade", weight: 20, title: "Finish Trades",
     read: "Ching, Building Construction Illustrated — Ch. 8 Doors & Windows, Ch. 10 Finish Work; exterior cladding & stucco in Ch. 7 Moisture & Thermal Protection.",
+    topics: ["Painting, staining, coating & interior wall covering", "Tile & stone", "Floor covering", "Cabinetry & millwork", "Plaster, drywall & ceilings", "Windows, skylights & doors", "Landscaping"],
     lessons: [
       { key: "drywall-interior",
         title: "Drywall & interior wall systems",
@@ -386,6 +393,7 @@ const SECTIONS = [
   {
     sec: 12, part: "Trade", weight: 15, title: "Safety (Trade)",
     read: "Cal/OSHA Title 8, Construction Safety Orders (§1500+) — Ching is a methods text, not a safety code, so use Cal/OSHA directly for this section.",
+    topics: ["Personnel safety", "Transportation & traffic control", "Environmental safety"],
     lessons: [
       { key: "fall-protection",
         title: "Fall protection & elevated work",
@@ -454,6 +462,7 @@ export function buildCurriculum() {
         part: s.part,
         weight: s.weight,
         read: s.read || "",
+        topics: s.topics || [],
         wk: Math.max(1, Math.round((order / total) * 26)),
         title: l.title,
         objective: l.obj,
