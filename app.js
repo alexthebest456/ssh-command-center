@@ -8,7 +8,7 @@ import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from ".
 const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
-  "habits", "habitLog", "goals", "books", "workouts",
+  "habits", "habitLog", "goals", "books", "workouts", "academy", "vocab",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -128,6 +128,7 @@ const NAV_GROUPS = [
     { id: "dailyos", label: "Daily Non-Negotiables" },
     { id: "goals", label: "Goals" },
     { id: "reading", label: "Reading" },
+    { id: "academy", label: "Contractor Academy" },
   ]},
   { title: "Focus", items: [
     { id: "capture", label: "Capture" },
@@ -508,6 +509,69 @@ VIEWS.myday = {
     root.querySelectorAll("[data-one-done]").forEach((el) => el.addEventListener("click", () => { toggleTask(el.dataset.oneDone); localStorage.removeItem("sshcc:focus"); toast("Done. Next one loaded. 🎯"); }));
     root.querySelectorAll("[data-one-edit]").forEach((el) => el.addEventListener("click", () => editTask(el.dataset.oneEdit)));
     root.querySelectorAll("[data-set-focus]").forEach((el) => el.addEventListener("click", () => { setFocusPin(el.dataset.setFocus); render(); toast("Set as today's ONE Thing 🎯"); }));
+  },
+};
+
+// ── Personal · Contractor Academy (CSLB "B" apprenticeship curriculum) ───────
+function academyLessons() { return state.academy.slice().sort((a, b) => (a.sec - b.sec) || (a.order - b.order)); }
+function academyNext() { return academyLessons().find((l) => l.status !== "done") || null; }
+
+VIEWS.academy = {
+  render() {
+    const all = academyLessons();
+    const done = all.filter((l) => l.status === "done").length;
+    const pct = all.length ? Math.round((done / all.length) * 100) : 0;
+    const next = academyNext();
+    const dd = daysUntil("2026-12-31");
+    const sections = {};
+    for (const l of all) { (sections[l.sec] = sections[l.sec] || { title: l.section, sec: l.sec, wk: l.wk, lessons: [] }).lessons.push(l); }
+    const secList = Object.values(sections).sort((a, b) => a.sec - b.sec);
+    const vocab = state.vocab.slice().sort((a, b) => (a.term || "").localeCompare(b.term || ""));
+
+    return `
+    <div class="view">
+      <div class="view-head"><div><div class="eyebrow">CSLB “B” Apprenticeship</div><h1>Contractor Academy</h1></div>
+        <div class="mono muted" style="font-size:11px">${done}/${all.length} lessons · ${dd}d to Dec 31</div></div>
+
+      <div class="grid cols-3 mb">
+        <div class="stat"><div class="k">Program Progress</div><div class="v ${pct >= 100 ? "green" : "amber"}">${pct}%</div><div class="sub">${done}/${all.length} lessons</div></div>
+        <div class="stat"><div class="k">Current Section</div><div class="v" style="font-size:16px">${next ? "§" + next.sec : "Done"}</div><div class="sub">${next ? esc(next.section) : "Exam time"}</div></div>
+        <div class="stat"><div class="k">Target</div><div class="v" style="font-size:16px">Dec 31</div><div class="sub">${dd} days out</div></div>
+      </div>
+
+      ${next ? `<div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
+        <div class="flex between wrap"><div class="panel-title" style="margin:0"><span class="n">🎓</span> Today's Lesson</div>
+          <span class="tag amber">Section ${next.sec} · Wk ${next.wk || "—"}</span></div>
+        <div style="font-size:19px;font-weight:700;margin-top:6px">${esc(next.title)}</div>
+        <div class="mono muted" style="font-size:11px;margin-top:3px">${esc(next.section)}</div>
+        ${next.objective ? `<div class="mt" style="font-size:13px"><strong>Objective:</strong> ${esc(next.objective)}</div>` : ""}
+        ${next.content ? `<div class="mt" style="font-size:13px;white-space:pre-wrap">${esc(next.content)}</div>` : `<div class="muted mt" style="font-size:12.5px">Tell your mentor “teach me today's lesson” and I'll walk you through it — then mark it complete.</div>`}
+        <div class="mt"><button class="btn primary sm" data-lesson-done="${next.id}">✓ Complete lesson → next</button></div>
+      </div>` : `<div class="panel mb"><div class="empty">🎉 Curriculum complete — you're ready for the exam.</div></div>`}
+
+      <div class="panel mb">
+        <div class="panel-title"><span class="n">▸</span> Curriculum roadmap — 6 months to your B license</div>
+        ${secList.map((s) => { const d = s.lessons.filter((l) => l.status === "done").length, p = Math.round(d / s.lessons.length * 100), cur = next && next.sec === s.sec;
+          return `<div class="mb" style="${cur ? "border-left:2px solid var(--amber);padding-left:10px" : ""}">
+            <div class="flex between"><div style="font-weight:600;font-size:13px">§${s.sec} — ${esc(s.title)} ${cur ? `<span class="tag amber">now</span>` : ""}</div><div class="mono muted" style="font-size:11px">${d}/${s.lessons.length}</div></div>
+            <div class="bar" style="margin-top:4px"><span class="${p >= 100 ? "ok" : ""}" style="width:${p}%"></span></div>
+            <div class="mt">${s.lessons.map((l) => `<div class="row" style="padding:6px 10px;margin-bottom:4px"><div class="check ${l.status === "done" ? "done" : ""}" data-lesson-toggle="${l.id}" style="width:18px;height:18px;font-size:11px">✓</div><div class="body"><div class="t" style="font-size:12.5px">${esc(l.title)}</div></div></div>`).join("")}</div>
+          </div>`; }).join("")}
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span class="n">▸</span> Knowledge Base — vocabulary (${vocab.length})</div>
+        ${vocab.length ? vocab.map((v) => `<div class="row" style="padding:8px 10px"><div class="body"><div class="t" style="font-size:13px">${esc(v.term)}</div><div class="m" style="white-space:normal">${esc(v.def || "")}</div></div></div>`).join("") : `<div class="empty">Terms you learn get saved here for spaced-repetition review.</div>`}
+      </div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-lesson-done],[data-lesson-toggle]").forEach((el) => el.addEventListener("click", () => {
+      const id = el.dataset.lessonDone || el.dataset.lessonToggle;
+      const l = state.academy.find((x) => x.id === id); if (!l) return;
+      DB.upsert("academy", { ...l, status: l.status === "done" ? "todo" : "done", doneAt: l.status === "done" ? null : Date.now() });
+      if (el.dataset.lessonDone) toast("Lesson complete 🎓");
+    }));
   },
 };
 
