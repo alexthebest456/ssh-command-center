@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
 import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
+import { reconcileAcademy } from "./academy-curriculum.js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
@@ -546,11 +547,13 @@ VIEWS.academy = {
         <div class="mono muted" style="font-size:11px;margin-top:3px">${esc(next.section)}</div>
         ${next.objective ? `<div class="mt" style="font-size:13px"><strong>Objective:</strong> ${esc(next.objective)}</div>` : ""}
         ${next.content ? `<div class="mt" style="font-size:13px;white-space:pre-wrap">${esc(next.content)}</div>` : `<div class="muted mt" style="font-size:12.5px">Tell your mentor “teach me today's lesson” and I'll walk you through it — then mark it complete.</div>`}
+        ${next.cite ? `<div class="mono muted mt" style="font-size:10.5px">📖 Source: ${esc(next.cite)}</div>` : ""}
         <div class="mt"><button class="btn primary sm" data-lesson-done="${next.id}">✓ Complete lesson → next</button></div>
       </div>` : `<div class="panel mb"><div class="empty">🎉 Curriculum complete — you're ready for the exam.</div></div>`}
 
       <div class="panel mb">
         <div class="panel-title"><span class="n">▸</span> Curriculum roadmap — 6 months to your B license</div>
+        <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Built from the official CSLB exam blueprint. Two exams: <strong>L&amp;B</strong> (Law &amp; Business) then <strong>Trade</strong> (General Building B). Each section is weighted by its real share of the exam (shown as %).</div>
         ${secList.map((s) => { const d = s.lessons.filter((l) => l.status === "done").length, p = Math.round(d / s.lessons.length * 100), cur = next && next.sec === s.sec;
           return `<div class="mb" style="${cur ? "border-left:2px solid var(--amber);padding-left:10px" : ""}">
             <div class="flex between"><div style="font-weight:600;font-size:13px">§${s.sec} — ${esc(s.title)} ${cur ? `<span class="tag amber">now</span>` : ""}</div><div class="mono muted" style="font-size:11px">${d}/${s.lessons.length}</div></div>
@@ -2316,6 +2319,7 @@ async function boot() {
   try { await seedIfEmpty(); } catch (e) { console.warn("seed skipped", e); }
   try { await seedPersonalOS(); } catch (e) { console.warn("personal OS seed skipped", e); }
   try { await upgradePortfolio(); } catch (e) { console.warn("portfolio upgrade skipped", e); }
+  try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
 
