@@ -32,7 +32,7 @@
 import { DB } from "./db.js";
 
 // Bump this whenever the curriculum below changes so every device re-syncs.
-export const CURRICULUM_VERSION = "cslb-official-v3";
+export const CURRICULUM_VERSION = "cslb-official-v4";
 
 // Verified facts about the two exams (from the official CSLB study guides).
 export const EXAM_FACTS = "Both exams are closed-book, multiple-choice (4 options, one BEST answer). A calculator is provided; some questions require math. No penalty for guessing.";
@@ -50,7 +50,7 @@ const SECTIONS = [
   // ══ EXAM 1 — LAW & BUSINESS ═══════════════════════════════════════════════
   {
     sec: 1, part: "L&B", weight: 13, title: "Business Organization & Licensing",
-    read: "License Law Reference Book (2024) — Contractors State License Law, Articles 1–4 (B&P §7000–7091) + Rules & Regs (CCR Title 16).",
+    read: "License Law & Reference Book (2024) — Section I Ch.1 Enforcement/Complaints (p.1), Section V Ch.7 DCA laws (p.71), and the Contractors License Law text in the Law Sections (p.69+).",
     lessons: [
       { key: "who-must-be-licensed",
         title: "Who must be licensed — and the price of skipping it",
@@ -76,7 +76,7 @@ const SECTIONS = [
   },
   {
     sec: 2, part: "L&B", weight: 15, title: "Business Finances",
-    read: "License Law Reference Book — financial/records provisions; pair with the CSLB Law & Business Study Guide (Business Finances) for the estimating & markup math.",
+    read: "License Law & Reference Book (2024) — Section III Ch.3: Financial Responsibility & Control (p.27), Financial Management (p.38), Operations Management (p.41).",
     lessons: [
       { key: "financial-statements",
         title: "Financial statements & recordkeeping",
@@ -102,7 +102,7 @@ const SECTIONS = [
   },
   {
     sec: 3, part: "L&B", weight: 20, title: "Employment Requirements",
-    read: "License Law Reference Book — employment & workers'-comp provisions (B&P §7125+) and the reprinted Labor Code excerpts.",
+    read: "License Law & Reference Book (2024) — Section III Ch.3 Managing a Business (p.15) + workers'-comp/employment provisions in the Law Sections (p.69+).",
     lessons: [
       { key: "employee-vs-ic",
         title: "Employee vs. independent contractor (the ABC test)",
@@ -138,7 +138,7 @@ const SECTIONS = [
   },
   {
     sec: 4, part: "L&B", weight: 12, title: "Insurance & Liens",
-    read: "License Law Reference Book — bond provisions (B&P §7071.5–7071.11) and the Mechanics Lien Law (Civil Code §8000+) reprinted in the reference section.",
+    read: "License Law & Reference Book (2024) — Section III: California Mechanics Liens & Stop Notices (p.50), Mechanics-Lien glossary (p.55); bond provisions (B&P §7071.x) in the Law Sections.",
     lessons: [
       { key: "contractor-bonds",
         title: "Contractor bonds — what they actually protect",
@@ -164,7 +164,7 @@ const SECTIONS = [
   },
   {
     sec: 5, part: "L&B", weight: 21, title: "Contract Requirements & Execution",
-    read: "License Law Reference Book — Home Improvement Business (B&P §7150–7159.5) and contract-requirement provisions. Highest-weight L&B area — read it twice.",
+    read: "License Law & Reference Book (2024) — Section II Home Improvement (p.7): HI Contract Requirements (p.11) & Joint Control Agreements (p.14). Highest-weight L&B area — read it twice.",
     lessons: [
       { key: "contract-essentials",
         title: "Contract essentials & required elements",
@@ -200,7 +200,7 @@ const SECTIONS = [
   },
   {
     sec: 6, part: "L&B", weight: 5, title: "Public Works",
-    read: "License Law Reference Book / Labor Code excerpts — prevailing wage & public works (Labor Code §1720+, §1771, §1777.5). Small section (~5%) — don't over-invest.",
+    read: "License Law & Reference Book (2024) — Section III Bidding on Government Contracts (p.80) + prevailing-wage/public-works provisions in the Law Sections (Labor Code §1720+, §1771, §1777.5). Small section (~5%) — don't over-invest.",
     lessons: [
       { key: "prevailing-wage-dir",
         title: "Prevailing wage & DIR registration",
@@ -216,7 +216,7 @@ const SECTIONS = [
   },
   {
     sec: 7, part: "L&B", weight: 14, title: "Safety (Law & Business)",
-    read: "License Law Reference Book — safety provisions; supplement with Cal/OSHA Title 8 §3203 (IIPP) and the Cal/OSHA construction pocket guide.",
+    read: "License Law & Reference Book (2024) — Section IV Construction Standards & Safety Regulations: USA dig-alert (p.61), Wells (p.67); + Cal/OSHA Title 8 §3203 (IIPP).",
     lessons: [
       { key: "iipp",
         title: "Injury & Illness Prevention Program (IIPP)",
