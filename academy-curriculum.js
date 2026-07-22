@@ -32,7 +32,7 @@
 import { DB } from "./db.js";
 
 // Bump this whenever the curriculum below changes so every device re-syncs.
-export const CURRICULUM_VERSION = "cslb-official-v4";
+export const CURRICULUM_VERSION = "cslb-official-v5";
 
 // Verified facts about the two exams (from the official CSLB study guides).
 export const EXAM_FACTS = "Both exams are closed-book, multiple-choice (4 options, one BEST answer). A calculator is provided; some questions require math. No penalty for guessing.";
@@ -65,7 +65,7 @@ const SECTIONS = [
       { key: "biz-structures-qualifier",
         title: "Business structures & the qualifier (RME / RMO)",
         obj: "Choose a legal structure and understand the qualifying individual's duties.",
-        content: "A license is issued to a sole owner, partnership, corporation, or LLC. Every license needs a qualifying individual — either a Responsible Managing Owner (RMO) or Responsible Managing Employee (RME) — who actually exercises direction and control of construction operations. A qualifier must supervise the business, not just lend a license; one person can generally qualify no more than three firms.",
+        content: "A license is issued to a sole owner, partnership, corporation, or LLC. Every license needs a qualifying individual — a Responsible Managing Owner (RMO) or Responsible Managing Employee (RME) — who exercises direction and control of construction operations. An RME must be a bona fide employee actively engaged at least 32 hours, or 80% of the business's operating hours, per week. One person can generally qualify no more than three firms; lending a license without real supervision is illegal.",
         cite: "B&P §7068, §7068.1" },
       { key: "getting-maintaining-license",
         title: "Getting & maintaining your license",
@@ -117,8 +117,8 @@ const SECTIONS = [
       { key: "workers-comp",
         title: "Workers' compensation — non-negotiable",
         obj: "Understand when workers' comp is mandatory and the cost of going without.",
-        content: "If you have even one employee, California requires workers' compensation insurance — no exceptions. A B contractor with employees must carry a valid WC policy on file with the CSLB or the license is suspended. Operating without it exposes you to stop orders, steep penalties, and personal liability for a hurt worker. A sole owner with no employees may file an exemption.",
-        cite: "Labor Code §3700; B&P §7125" },
+        content: "If you have even one employee, California requires workers' compensation insurance — no exceptions — and the certificate must be on file with the CSLB (B&P §7125) or the license is suspended. A sole owner with no employees may file an exemption, EXCEPT holders of C-8 (Concrete), C-20 (HVAC), C-22 (Asbestos), C-39 (Roofing), and C-61/D-49 (Tree Service), who must carry WC regardless. Starting January 2026, EVERY classification must have a WC certificate on file. Operating uninsured brings stop orders, penalties, and personal liability for a hurt worker.",
+        cite: "Labor Code §3700; B&P §7125, §7125.5" },
       { key: "hiring-antidiscrimination",
         title: "Hiring, I-9 & anti-discrimination",
         obj: "Onboard employees legally and meet anti-discrimination obligations.",
@@ -143,8 +143,8 @@ const SECTIONS = [
       { key: "contractor-bonds",
         title: "Contractor bonds — what they actually protect",
         obj: "Distinguish the license bond, qualifier bond, and disciplinary bond and what each covers.",
-        content: "The $25,000 contractor's license bond protects the public — homeowners, employees, suppliers — NOT you; if a claim is paid, you must repay the surety. An RMO/RME who isn't a majority owner also needs a bond of qualifying individual. A separate disciplinary bond can be required after a CSLB violation. A bond is not insurance and doesn't cover your losses.",
-        cite: "B&P §7071.6, §7071.9" },
+        content: "The $25,000 contractor's license bond protects the public — homeowners, employees, suppliers — NOT you; if a claim is paid, you must repay the surety. A qualifier (RMO/RME) who owns under 10% also needs a $25,000 bond of qualifying individual. An LLC must additionally carry a $100,000 worker/wage surety bond and at least $1 million in liability insurance. A disciplinary bond — up to 10× the base — can be required after a violation. A bond is not insurance; it doesn't cover your losses.",
+        cite: "B&P §7071.6, §7071.6.5, §7071.8, §7071.9, §7071.19" },
       { key: "insurance-types",
         title: "Insurance every builder should carry",
         obj: "Match the right insurance product to each construction risk.",
@@ -153,7 +153,7 @@ const SECTIONS = [
       { key: "mechanics-liens",
         title: "Mechanics liens & the preliminary notice",
         obj: "Preserve lien rights with correct notices and deadlines.",
-        content: "California's mechanics lien is a constitutional right that lets unpaid contractors and suppliers claim the improved property. To preserve it, serve a Preliminary Notice (the \"20-day notice\") within 20 days of first furnishing labor/materials. A direct contractor generally records the lien within 90 days of completion (60 days if a Notice of Completion is recorded), then must sue to foreclose within 90 days of recording.",
+        content: "California's mechanics lien is a constitutional right that lets unpaid contractors and suppliers claim the improved property. Preserve it by serving a Preliminary (20-day) Notice within 20 days of first furnishing labor/materials. If a Notice of Completion is recorded, a prime contractor records its lien within 60 days and a subcontractor within 30 days; if no NOC is recorded, all have 90 days from completion. Then you must file suit to foreclose within 90 days of recording the lien, or it expires.",
         cite: "Civil Code §8200+, §8412, §8414, §8460" },
       { key: "stop-notices-payment-bonds",
         title: "Stop payment notices & payment bonds",
@@ -174,8 +174,8 @@ const SECTIONS = [
       { key: "home-improvement-contracts",
         title: "Home improvement contracts & down-payment limits",
         obj: "Structure payments legally on residential remodel work.",
-        content: "On a home improvement contract the down payment cannot exceed $1,000 or 10% of the contract price, whichever is LESS. Progress payments can never run ahead of the value of work actually performed and materials delivered. These consumer-protection limits are strict and among the most-tested rules on the exam.",
-        cite: "B&P §7159.5" },
+        content: "On a home improvement contract the down payment cannot exceed $1,000 or 10% of the contract price, whichever is LESS, and progress payments can never run ahead of the value of work actually performed and materials delivered. A separate 'service and repair contract' may be used for jobs of $750 or less that meet four specific conditions. These consumer-protection limits are strict and among the most-tested rules on the exam.",
+        cite: "B&P §7159.5, §7159.10" },
       { key: "right-to-cancel-disclosures",
         title: "Right to cancel & required disclosures",
         obj: "Give consumers their cancellation rights and mandatory CSLB disclosures.",
@@ -236,8 +236,8 @@ const SECTIONS = [
       { key: "safety-programs",
         title: "Required safety programs (heat, fall, respiratory)",
         obj: "Recognize the specific safety programs a builder must run.",
-        content: "California mandates topic-specific programs: a Heat Illness Prevention plan for outdoor work (§3395, with water/shade/rest triggers), fall protection, respiratory protection where dust/silica is present, and use of a \"competent person\" to identify hazards. Match the program to the hazard on each job.",
-        cite: "Cal/OSHA Title 8 §3395; §1670+ (fall); §5144 (respiratory)" },
+        content: "California mandates topic-specific programs: a Heat Illness Prevention plan for outdoor work (§3395, with water/shade/rest triggers), fall protection, respiratory protection where dust/silica is present, and a \"competent person\" to identify hazards. Before any digging, you must also call the Underground Service Alert center (811) at least two working days — but not more than 14 days — ahead; the ticket is valid 28 days and an excavation permit is invalid without a USA number. Match the program to the hazard on each job.",
+        cite: "Cal/OSHA Title 8 §3395, §1670+, §5144; Gov. Code §4216+ (USA)" },
     ],
   },
 
