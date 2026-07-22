@@ -32,7 +32,7 @@
 import { DB } from "./db.js";
 
 // Bump this whenever the curriculum below changes so every device re-syncs.
-export const CURRICULUM_VERSION = "cslb-official-v5";
+export const CURRICULUM_VERSION = "cslb-official-v6";
 
 // Verified facts about the two exams (from the official CSLB study guides).
 export const EXAM_FACTS = "Both exams are closed-book, multiple-choice (4 options, one BEST answer). A calculator is provided; some questions require math. No penalty for guessing.";
@@ -70,8 +70,8 @@ const SECTIONS = [
       { key: "getting-maintaining-license",
         title: "Getting & maintaining your license",
         obj: "Map the full path from application to an active license you keep in good standing.",
-        content: "The path: application + fee, pass both exams, Live Scan fingerprinting, and post a $25,000 contractor bond (raised from $15,000 on Jan 1, 2023). Licenses renew every two years. You must report changes — business address, personnel, qualifier — to the CSLB, generally within 90 days, or risk the license going delinquent.",
-        cite: "B&P §7065, §7071.6, §7083; CSLB fee schedule" },
+        content: "The path: application + fee, pass both exams, Live Scan fingerprinting, and post a $25,000 contractor bond (raised from $15,000 on Jan 1, 2023). Licenses renew every two years, and you must report changes — address, personnel, qualifier — to the CSLB within 90 days. CSLB enforcement can cite a licensee with civil penalties up to $8,000 (up to $30,000 for serious violations under §7110/7114/7118); unlicensed persons face citations up to $15,000.",
+        cite: "B&P §7065, §7071.6, §7083, §7099.2, §7028.7" },
     ],
   },
   {
@@ -91,8 +91,8 @@ const SECTIONS = [
       { key: "cash-flow-billing",
         title: "Cash flow & construction billing",
         obj: "Bill on a schedule of values and manage the cash gap between spend and payment.",
-        content: "On larger jobs you bill via progress payments against a schedule of values, often with 5–10% retention held until completion. Because you pay labor and material before the owner pays you, cash flow — not profit — is what actually sinks contractors. Never let billed work fall behind completed work, and never over-bill (it's illegal on home improvement contracts).",
-        cite: "CSLB Law & Business Study Guide — Business Finances" },
+        content: "On larger jobs you bill via progress payments against a schedule of values, often with 5–10% retention held until completion. Because you pay labor and material before the owner pays you, cash flow — not profit — is what actually sinks contractors. Never over-bill (illegal on home improvement contracts), and pay each subcontractor within 7 days of receiving their progress payment — withholding at most 150% of any genuinely disputed amount — or owe a 2%-per-month penalty.",
+        cite: "CSLB L&B Study Guide; B&P §7108.5" },
       { key: "taxes-obligations",
         title: "Taxes & business obligations",
         obj: "Identify the federal and California tax obligations of a construction business.",
