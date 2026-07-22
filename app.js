@@ -4,12 +4,14 @@
 import { DB, genId } from "./db.js";
 import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
+import { QUESTIONS } from "./academy-questions.js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
   "habits", "habitLog", "goals", "books", "workouts", "academy", "vocab",
+  "quizLog",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -517,6 +519,21 @@ VIEWS.myday = {
 function academyLessons() { return state.academy.slice().sort((a, b) => (a.sec - b.sec) || (a.order - b.order)); }
 function academyNext() { return academyLessons().find((l) => l.status !== "done") || null; }
 
+// Practice-exam UI state (not persisted; only the score log in `quizLog` is).
+const quizState = { sec: null, answers: {} }; // answers: { [questionId]: choiceIndex }
+function quizSecScore(sec) {
+  const qs = QUESTIONS.filter((q) => q.sec === sec);
+  const logs = state.quizLog || [];
+  let answered = 0, correct = 0;
+  for (const q of qs) { const lg = logs.find((x) => x.qid === q.id); if (lg) { answered++; if (lg.correct) correct++; } }
+  return { total: qs.length, answered, correct };
+}
+function quizOverall() {
+  const logs = state.quizLog || [];
+  const correct = logs.filter((x) => x.correct).length;
+  return { answered: logs.length, correct, total: QUESTIONS.length };
+}
+
 VIEWS.academy = {
   render() {
     const all = academyLessons();
@@ -569,6 +586,33 @@ VIEWS.academy = {
           </div>`; }).join("")}
       </div>
 
+      ${(() => {
+        const ov = quizOverall();
+        const opct = ov.answered ? Math.round((ov.correct / ov.answered) * 100) : 0;
+        const secMeta = {}; for (const s of secList) secMeta[s.sec] = s.title;
+        const secNums = [...new Set(QUESTIONS.map((q) => q.sec))].sort((a, b) => a - b);
+        const activeQs = quizState.sec != null ? QUESTIONS.filter((q) => q.sec === quizState.sec) : [];
+        return `<div class="panel mb">
+        <div class="flex between wrap"><div class="panel-title" style="margin:0"><span class="n">📝</span> Practice Exam</div>
+          <span class="mono muted" style="font-size:11px">${ov.correct}/${ov.answered} correct · ${opct}% · ${QUESTIONS.length} questions</span></div>
+        <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Official CSLB format — four choices, one BEST answer, no penalty for guessing. Pick a section to drill; your score is saved and syncs across devices. Aim for 80%+ before the exam.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
+          ${secNums.map((n) => { const sc = quizSecScore(n); const on = quizState.sec === n; const rate = sc.answered ? Math.round((sc.correct / sc.answered) * 100) : null;
+            return `<button class="btn sm ${on ? "primary" : ""}" data-quiz-sec="${n}" style="font-size:11px">§${n}${rate != null ? ` · ${rate}%` : ""}</button>`; }).join("")}
+          ${quizState.sec != null ? `<button class="btn sm" data-quiz-sec="close" style="font-size:11px">✕ close</button>` : ""}
+        </div>
+        ${activeQs.length ? `<div style="font-weight:600;font-size:12.5px;margin:6px 0 4px">§${quizState.sec} — ${esc(secMeta[quizState.sec] || "")}</div>
+          ${activeQs.map((q) => { const picked = quizState.answers[q.id]; const revealed = picked != null;
+            return `<div class="mb" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+              <div style="font-size:12.5px;font-weight:600;margin-bottom:6px">${esc(q.q)}</div>
+              ${q.choices.map((c, i) => { let bg = "transparent", bd = "var(--line)";
+                if (revealed && i === q.answer) { bg = "var(--ok-soft,rgba(40,180,120,.14))"; bd = "var(--ok,#28b478)"; }
+                else if (revealed && i === picked) { bg = "rgba(220,80,80,.12)"; bd = "#dc5050"; }
+                return `<button class="quiz-choice" data-quiz-q="${q.id}" data-quiz-choice="${i}" ${revealed ? "disabled" : ""} style="display:block;width:100%;text-align:left;font-size:12px;padding:6px 9px;margin-bottom:4px;border:1px solid ${bd};border-radius:6px;background:${bg};cursor:${revealed ? "default" : "pointer"}">${String.fromCharCode(97 + i)}. ${esc(c)}</button>`; }).join("")}
+              ${revealed ? `<div class="muted" style="font-size:11px;margin-top:4px">${picked === q.answer ? "✅ Correct." : "❌ Incorrect."} ${esc(q.explain)} <span class="mono">(${esc(q.cite)})</span></div>` : ""}
+            </div>`; }).join("")}` : `<div class="muted" style="font-size:11.5px">Select a section above to start a set.</div>`}
+      </div>`; })()}
+
       <div class="panel">
         <div class="panel-title"><span class="n">▸</span> Knowledge Base — vocabulary (${vocab.length})</div>
         ${vocab.length ? vocab.map((v) => `<div class="row" style="padding:8px 10px"><div class="body"><div class="t" style="font-size:13px">${esc(v.term)}</div><div class="m" style="white-space:normal">${esc(v.def || "")}</div></div></div>`).join("") : `<div class="empty">Terms you learn get saved here for spaced-repetition review.</div>`}
@@ -581,6 +625,24 @@ VIEWS.academy = {
       const l = state.academy.find((x) => x.id === id); if (!l) return;
       DB.upsert("academy", { ...l, status: l.status === "done" ? "todo" : "done", doneAt: l.status === "done" ? null : Date.now() });
       if (el.dataset.lessonDone) toast("Lesson complete 🎓");
+    }));
+
+    // Practice-exam: pick / close a section (UI-only state → re-render directly).
+    root.querySelectorAll("[data-quiz-sec]").forEach((el) => el.addEventListener("click", () => {
+      const v = el.dataset.quizSec;
+      quizState.sec = v === "close" ? null : Number(v);
+      render();
+    }));
+
+    // Practice-exam: answer a question — record UI pick + persist score to quizLog.
+    root.querySelectorAll(".quiz-choice").forEach((el) => el.addEventListener("click", () => {
+      const qid = el.dataset.quizQ, idx = Number(el.dataset.quizChoice);
+      if (quizState.answers[qid] != null) return; // already answered
+      const q = QUESTIONS.find((x) => x.id === qid); if (!q) return;
+      quizState.answers[qid] = idx;
+      const correct = idx === q.answer;
+      DB.upsert("quizLog", { id: "ql-" + qid, qid, sec: q.sec, choice: idx, correct, at: Date.now() });
+      toast(correct ? "✅ Correct" : "❌ Not quite — read the explanation");
     }));
   },
 };
