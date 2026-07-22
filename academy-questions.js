@@ -11,7 +11,7 @@
 //  choice. Keep ids stable so score history survives edits.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const QUESTION_VERSION = "cslb-questions-v1";
+export const QUESTION_VERSION = "cslb-questions-v2";
 
 export const QUESTIONS = [
   // ── §1 Business Organization & Licensing ───────────────────────────────────
@@ -169,6 +169,16 @@ export const QUESTIONS = [
     choices: ["Removing waste from a bid", "Counting/measuring materials from the plans", "Subtracting overhead", "A change order"], answer: 1,
     explain: "A takeoff is measuring and counting every material off the plans, then applying waste factors and unit prices to build the estimate.",
     cite: "CSLB (B) Study Guide — Planning & Estimating" },
+  { id: "q-8-figured", sec: 8,
+    q: "The drawings show a wall figured (written) as 10'-6\", but scaling it with a ruler gives 10'-4\". You should build it:",
+    choices: ["To the scaled 10'-4\"", "To the figured 10'-6\"", "Split the difference at 10'-5\"", "Whichever is smaller"], answer: 1,
+    explain: "Written (figured) dimensions always govern over scaled measurements — prints shrink, stretch, and copy imperfectly, so you never scale off a drawing for a real dimension.",
+    cite: "Ching, Building Construction Illustrated — drawing conventions" },
+  { id: "q-8-scale", sec: 8,
+    q: "The most common scale for a residential floor plan is:",
+    choices: ["1 inch = 1 foot", "1/4 inch = 1 foot", "1/8 inch = 1 foot", "1/2 inch = 1 foot"], answer: 1,
+    explain: "1/4\" = 1'-0\" is the standard residential floor-plan scale; site plans use smaller scales (e.g. 1/16\") and details use larger ones (e.g. 1-1/2\").",
+    cite: "Ching, Building Construction Illustrated — Ch. 2" },
 
   // ── §9 Framing & Structural Components (Trade) ─────────────────────────────
   { id: "q-9-studs", sec: 9,
@@ -186,6 +196,21 @@ export const QUESTIONS = [
     choices: ["Cut to fit as needed", "Notched for plumbing", "Never field-modified without an engineer's approval", "Reinforced with extra nails anywhere"], answer: 2,
     explain: "Trusses are engineered assemblies — cutting or notching one without an engineer's sign-off is a serious structural error.",
     cite: "CRC Ch. 8 (roof-ceiling)" },
+  { id: "q-9-anchorbolt", sec: 9,
+    q: "Foundation anchor bolts securing a wood sill plate are generally spaced at a MAXIMUM of:",
+    choices: ["2 feet on center", "4 feet on center", "6 feet on center", "10 feet on center"], answer: 2,
+    explain: "Anchor bolts are max 6 ft o.c., at least 1/2\" diameter embedded ~7\", with a bolt within 12\" of each plate end and a minimum of two bolts per plate piece.",
+    cite: "CRC R403.1.6; Ching Ch. 3" },
+  { id: "q-9-footingdepth", sec: 9,
+    q: "A footing must generally bear at least how far below the undisturbed ground surface (and below the frost line)?",
+    choices: ["6 inches", "12 inches", "24 inches", "36 inches"], answer: 1,
+    explain: "Footings extend at least 12\" below undisturbed grade and below the local frost line, onto soil of adequate bearing capacity.",
+    cite: "CRC R403.1.4; Ching Ch. 3" },
+  { id: "q-9-header", sec: 9,
+    q: "The vertical framing member that carries a header's load down beside a door or window opening is the:",
+    choices: ["King stud", "Trimmer (jack) stud", "Cripple stud", "Top plate"], answer: 1,
+    explain: "The trimmer (jack) stud supports the header ends and transfers the load down; the full-height king stud beside it resists lateral movement. Short cripple studs fill above/below openings.",
+    cite: "Ching, Building Construction Illustrated — Ch. 5 (wall framing)" },
 
   // ── §10 Core Trades (Trade) ────────────────────────────────────────────────
   { id: "q-10-cylinder", sec: 10,
@@ -208,6 +233,31 @@ export const QUESTIONS = [
     choices: ["Any laborer", "The B contractor personally", "A C-10 electrical contractor", "The homeowner"], answer: 2,
     explain: "Electrical is C-10 specialty scope. A B coordinates it but must self-perform only within limits or subcontract to a C-10.",
     cite: "Cal. Electrical Code; B classification limits" },
+  { id: "q-10-cuyd", sec: 10,
+    q: "Concrete is ordered by the cubic yard. One cubic yard equals how many cubic feet?",
+    choices: ["9 cubic feet", "18 cubic feet", "27 cubic feet", "36 cubic feet"], answer: 2,
+    explain: "1 cubic yard = 3 ft × 3 ft × 3 ft = 27 cubic feet. Divide a slab's cubic-foot volume by 27 (then add waste) to order concrete.",
+    cite: "Estimating fundamentals; Ching Ch. 3" },
+  { id: "q-10-grade", sec: 10,
+    q: "Finished grade should fall away from the foundation at least how much within the first 10 feet?",
+    choices: ["1 inch", "3 inches", "6 inches", "12 inches"], answer: 2,
+    explain: "A minimum 6\" drop in the first 10 feet (a 5% slope) directs surface water away from the building — poor drainage is a leading cause of foundation problems.",
+    cite: "CRC R401.3; Ching Ch. 1" },
+  { id: "q-10-slope", sec: 10,
+    q: "The MINIMUM roof slope for standard asphalt composition shingles is:",
+    choices: ["1:12", "2:12", "4:12", "6:12"], answer: 1,
+    explain: "Asphalt shingles require a 2:12 minimum slope, and double underlayment is required from 2:12 up to 4:12. Below 2:12 you need a low-slope membrane, not shingles.",
+    cite: "CRC R905.2.2; Ching Ch. 6" },
+  { id: "q-10-weepscreed", sec: 10,
+    q: "The weep screed at the base of an exterior stucco wall must sit at least how far above the earth?",
+    choices: ["1 inch", "2 inches", "4 inches", "8 inches"], answer: 2,
+    explain: "The weep screed must be a minimum 4\" above earth (or 2\" above paved surfaces) so the wall can drain and dry — it's the exit point for the wall's water-management layer.",
+    cite: "CRC R703.7.2.1; Ching Ch. 7" },
+  { id: "q-10-rvalue", sec: 10,
+    q: "A higher insulation R-value means the material has:",
+    choices: ["Greater resistance to heat flow", "Greater heat conductivity", "A lower fire rating", "More moisture absorption"], answer: 0,
+    explain: "R-value measures resistance to conductive heat flow — the higher the R-value, the better the insulation. California's Title 24 sets required R-values by climate zone and assembly.",
+    cite: "Ching Ch. 7; Cal. Energy Code (Title 24 Part 6)" },
 
   // ── §11 Finish Trades (Trade) ──────────────────────────────────────────────
   { id: "q-11-stucco", sec: 11,
@@ -225,6 +275,16 @@ export const QUESTIONS = [
     choices: ["The brand of paint", "Surface preparation", "The color", "Applying in one thick coat"], answer: 1,
     explain: "Paint is ~80% prep: clean, sound, primed surfaces. Coating failures are almost always prep or product-selection failures; VOC limits also apply.",
     cite: "CSLB (B) Study Guide; CARB VOC limits" },
+  { id: "q-11-egress", sec: 11,
+    q: "An emergency escape window in a bedroom must provide a minimum net clear opening of:",
+    choices: ["4.0 square feet", "5.7 square feet", "8.0 square feet", "10.0 square feet"], answer: 1,
+    explain: "5.7 sq ft net clear (5.0 sq ft at grade-floor level), with a min 24\" clear height, 20\" clear width, and a sill no higher than 44\" above the floor.",
+    cite: "CRC R310; Ching Ch. 8" },
+  { id: "q-11-typex", sec: 11,
+    q: "The gypsum board used in a fire-rated wall assembly (e.g. the garage/dwelling separation) is typically:",
+    choices: ["1/4\" regular board", "1/2\" regular board", "5/8\" Type X", "Green board only"], answer: 2,
+    explain: "5/8\" Type X has a glass-fiber-reinforced core rated for fire resistance; you cannot substitute regular board where a rated assembly is specified.",
+    cite: "CRC R302; Ching Ch. 10" },
 
   // ── §12 Safety (Trade) ─────────────────────────────────────────────────────
   { id: "q-12-fall", sec: 12,
@@ -242,4 +302,14 @@ export const QUESTIONS = [
     choices: ["Lead", "Respirable crystalline silica", "Asbestos", "Carbon monoxide"], answer: 1,
     explain: "Respirable crystalline silica requires an exposure control plan under Cal/OSHA §1532.3 — dust control on cutting is required, not optional.",
     cite: "Cal/OSHA Title 8 §1532.3" },
+  { id: "q-12-ladder", sec: 12,
+    q: "A straight or extension ladder should be set at a pitch of about:",
+    choices: ["1 foot out for every 2 feet of height", "1 foot out for every 4 feet of height", "1 foot out for every 8 feet of height", "Vertical against the wall"], answer: 1,
+    explain: "The 4:1 rule — base out 1 foot for every 4 feet of working height (about 75°). Too steep tips backward; too shallow slides out.",
+    cite: "Cal/OSHA Title 8 §1675; Ching Ch. 1 (safety)" },
+  { id: "q-12-guardrail", sec: 12,
+    q: "The top rail of a standard construction guardrail must be approximately:",
+    choices: ["30 inches high", "36 inches high", "42 inches high", "54 inches high"], answer: 2,
+    explain: "Top rail ~42\" (±3\") above the walking surface, with a midrail near 21\", capable of withstanding a 200-lb load. Guardrails are the first line of fall protection.",
+    cite: "Cal/OSHA Title 8 §1620" },
 ];
