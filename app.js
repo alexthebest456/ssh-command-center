@@ -5,6 +5,7 @@ import { DB, genId } from "./db.js";
 import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
+import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
@@ -541,6 +542,8 @@ VIEWS.academy = {
     const pct = all.length ? Math.round((done / all.length) * 100) : 0;
     const next = academyNext();
     const dd = daysUntil("2026-12-31");
+    const plan = buildPlan(all);
+    const ps = planStatus(plan, todayISO(), done);
     const sections = {};
     for (const l of all) { (sections[l.sec] = sections[l.sec] || { title: l.section, sec: l.sec, wk: l.wk, read: l.read, topics: l.topics || [], lessons: [] }).lessons.push(l); }
     const secList = Object.values(sections).sort((a, b) => a.sec - b.sec);
@@ -558,8 +561,16 @@ VIEWS.academy = {
       </div>
 
       ${next ? `<div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
-        <div class="flex between wrap"><div class="panel-title" style="margin:0"><span class="n">🎓</span> Today's Lesson</div>
-          <span class="tag amber">Section ${next.sec} · Wk ${next.wk || "—"}</span></div>
+        <div class="flex between wrap"><div class="panel-title" style="margin:0"><span class="n">🎓</span> ${ps.phase === "pre" ? "Next Up" : "Today's Lesson"}</div>
+          ${(() => {
+            if (ps.phase === "pre") return `<span class="tag">📅 Plan starts ${esc(fmtWeekday(plan.start))}</span>`;
+            const badge = ps.onTrack
+              ? (ps.delta > 0 ? `<span class="tag" style="background:var(--ok-soft,rgba(40,180,120,.14));color:var(--ok,#28b478)">🚀 ${ps.delta} ahead</span>`
+                              : `<span class="tag" style="background:var(--ok-soft,rgba(40,180,120,.14));color:var(--ok,#28b478)">✅ On track</span>`)
+              : `<span class="tag amber">⚠️ ${-ps.delta} behind</span>`;
+            return `<span class="mono muted" style="font-size:11px">Pace: lesson ${Math.min(ps.expected, ps.total)}/${ps.total}</span> ${badge}`;
+          })()}</div>
+        <div class="mono muted" style="font-size:11px;margin-top:2px">📅 ${esc(fmtWeekday(todayISO()))}${ps.isReviewDay && ps.phase === "active" ? " · Review & practice-exam day — no new lesson scheduled, so drill what you've learned" : ""}</div>
         <div style="font-size:19px;font-weight:700;margin-top:6px">${esc(next.title)}</div>
         <div class="mono muted" style="font-size:11px;margin-top:3px">${esc(next.section)}</div>
         ${next.objective ? `<div class="mt" style="font-size:13px"><strong>Objective:</strong> ${esc(next.objective)}</div>` : ""}
@@ -567,6 +578,29 @@ VIEWS.academy = {
         ${next.cite ? `<div class="mono muted mt" style="font-size:10.5px">📖 Source: ${esc(next.cite)}</div>` : ""}
         <div class="mt"><button class="btn primary sm" data-lesson-done="${next.id}">✓ Complete lesson → next</button></div>
       </div>` : `<div class="panel mb"><div class="empty">🎉 Curriculum complete — you're ready for the exam.</div></div>`}
+
+      ${(() => {
+        const ranges = sectionRanges(plan);
+        const doneBySec = {}; for (const l of all) { doneBySec[l.sec] = doneBySec[l.sec] || { d: 0, t: 0 }; doneBySec[l.sec].t++; if (l.status === "done") doneBySec[l.sec].d++; }
+        const t = todayISO();
+        const milestone = (icon, label, when, sub) => `<div class="flex between" style="padding:5px 0;border-bottom:1px dashed var(--line)"><div style="font-size:12.5px"><strong>${icon} ${esc(label)}</strong>${sub ? ` <span class="muted" style="font-size:11px">${esc(sub)}</span>` : ""}</div><div class="mono" style="font-size:11.5px">${esc(when)}</div></div>`;
+        return `<div class="panel mb">
+        <div class="panel-title"><span class="n">📅</span> Your 6-Month Plan — one lesson every weekday, starting ${esc(fmtShort(plan.start))}</div>
+        <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Weekdays = a new lesson; weekends = review + a practice-exam set. Finish all ${plan.sched.length} lessons by ${esc(fmtShort(plan.trEnd))}, then use the buffer to drill to 80%+ and sit each exam. Move faster anytime — “Complete lesson” always jumps you to the next one.</div>
+        <div class="mb" style="font-size:11.5px">
+          ${milestone("📘", "Law & Business lessons", `${fmtShort(plan.lbStart)} – ${fmtShort(plan.lbEnd)}`, "§1–§7")}
+          ${milestone("🎯", "Take the L&B exam", fmtWeekday(plan.lbExam), "target")}
+          ${milestone("🔨", "Trade (General Building B) lessons", `${fmtShort(plan.trStart)} – ${fmtShort(plan.trEnd)}`, "§8–§12")}
+          ${milestone("🎯", "Take the Trade exam", fmtWeekday(plan.trExam), "target")}
+          ${milestone("🎓", "Review buffer → licensed", `by ${fmtShort(plan.examTarget)}`, "practice exams + application")}
+        </div>
+        <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin-bottom:4px">SECTION-BY-SECTION CALENDAR</div>
+        ${ranges.map((r) => { const dc = doneBySec[r.sec] || { d: 0, t: r.count }; const p = Math.round(dc.d / dc.t * 100); const nowHere = t >= r.start && t <= r.end; const cur = next && next.sec === r.sec;
+          return `<div class="flex between" style="padding:4px 0;${cur ? "border-left:2px solid var(--amber);padding-left:8px;margin-left:-2px" : ""}">
+            <div style="font-size:12px"><span class="mono muted" style="font-size:10px">${r.part === "L&B" ? "📘" : "🔨"}</span> §${r.sec} ${esc(r.title.split(" · ")[1] || r.title)}${nowHere ? ` <span class="tag amber" style="font-size:9px">◀ now</span>` : ""}</div>
+            <div class="mono muted" style="font-size:10.5px">${fmtShort(r.start)}–${fmtShort(r.end)} · ${dc.d}/${dc.t}</div>
+          </div>`; }).join("")}
+      </div>`; })()}
 
       <div class="panel mb">
         <div class="panel-title"><span class="n">▸</span> Curriculum roadmap — 6 months to your B license</div>
