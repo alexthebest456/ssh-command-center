@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
 import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
-import { reconcileAcademy } from "./academy-curriculum.js";
+import { reconcileAcademy, TEXTS } from "./academy-curriculum.js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLLECTIONS = [
@@ -525,7 +525,7 @@ VIEWS.academy = {
     const next = academyNext();
     const dd = daysUntil("2026-12-31");
     const sections = {};
-    for (const l of all) { (sections[l.sec] = sections[l.sec] || { title: l.section, sec: l.sec, wk: l.wk, lessons: [] }).lessons.push(l); }
+    for (const l of all) { (sections[l.sec] = sections[l.sec] || { title: l.section, sec: l.sec, wk: l.wk, read: l.read, lessons: [] }).lessons.push(l); }
     const secList = Object.values(sections).sort((a, b) => a.sec - b.sec);
     const vocab = state.vocab.slice().sort((a, b) => (a.term || "").localeCompare(b.term || ""));
 
@@ -554,10 +554,15 @@ VIEWS.academy = {
       <div class="panel mb">
         <div class="panel-title"><span class="n">▸</span> Curriculum roadmap — 6 months to your B license</div>
         <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Built from the official CSLB exam blueprint. Two exams: <strong>L&amp;B</strong> (Law &amp; Business) then <strong>Trade</strong> (General Building B). Each section is weighted by its real share of the exam (shown as %).</div>
+        <div class="mb" style="font-size:11.5px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2,transparent)">
+          <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin-bottom:4px">📚 YOUR TWO TEXTS</div>
+          ${TEXTS.map((t) => `<div style="margin-bottom:2px"><strong>${esc(t.title)}</strong> <span class="muted">— ${esc(t.author)} · ${esc(t.use)}</span></div>`).join("")}
+        </div>
         ${secList.map((s) => { const d = s.lessons.filter((l) => l.status === "done").length, p = Math.round(d / s.lessons.length * 100), cur = next && next.sec === s.sec;
           return `<div class="mb" style="${cur ? "border-left:2px solid var(--amber);padding-left:10px" : ""}">
             <div class="flex between"><div style="font-weight:600;font-size:13px">§${s.sec} — ${esc(s.title)} ${cur ? `<span class="tag amber">now</span>` : ""}</div><div class="mono muted" style="font-size:11px">${d}/${s.lessons.length}</div></div>
             <div class="bar" style="margin-top:4px"><span class="${p >= 100 ? "ok" : ""}" style="width:${p}%"></span></div>
+            ${s.read ? `<div class="muted" style="font-size:10.5px;margin-top:4px">📖 ${esc(s.read)}</div>` : ""}
             <div class="mt">${s.lessons.map((l) => `<div class="row" style="padding:6px 10px;margin-bottom:4px"><div class="check ${l.status === "done" ? "done" : ""}" data-lesson-toggle="${l.id}" style="width:18px;height:18px;font-size:11px">✓</div><div class="body"><div class="t" style="font-size:12.5px">${esc(l.title)}</div></div></div>`).join("")}</div>
           </div>`; }).join("")}
       </div>

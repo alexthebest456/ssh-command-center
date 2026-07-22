@@ -32,7 +32,14 @@
 import { DB } from "./db.js";
 
 // Bump this whenever the curriculum below changes so every device re-syncs.
-export const CURRICULUM_VERSION = "cslb-official-v1";
+export const CURRICULUM_VERSION = "cslb-official-v2";
+
+// The two reference texts this program reads from. Each section below carries a
+// `read` assignment pointing to the exact chapter(s) to open when you get there.
+export const TEXTS = [
+  { key: "ching", title: "Building Construction Illustrated", author: "Francis D.K. Ching (2014)", use: "Trade exam — construction methods & assemblies" },
+  { key: "lawbook", title: "California Contractors License Law & Reference Book (2024)", author: "CSLB / LexisNexis", use: "Law & Business exam — the actual license law" },
+];
 
 // Each section = one official CSLB content area. `part` groups it under an exam;
 // `weight` is that area's official % of the exam; `sec` sets roadmap order.
@@ -40,6 +47,7 @@ const SECTIONS = [
   // ══ EXAM 1 — LAW & BUSINESS ═══════════════════════════════════════════════
   {
     sec: 1, part: "L&B", weight: 13, title: "Business Organization & Licensing",
+    read: "License Law Reference Book (2024) — Contractors State License Law, Articles 1–4 (B&P §7000–7091) + Rules & Regs (CCR Title 16).",
     lessons: [
       { key: "who-must-be-licensed",
         title: "Who must be licensed — and the price of skipping it",
@@ -65,6 +73,7 @@ const SECTIONS = [
   },
   {
     sec: 2, part: "L&B", weight: 15, title: "Business Finances",
+    read: "License Law Reference Book — financial/records provisions; pair with the CSLB Law & Business Study Guide (Business Finances) for the estimating & markup math.",
     lessons: [
       { key: "financial-statements",
         title: "Financial statements & recordkeeping",
@@ -90,6 +99,7 @@ const SECTIONS = [
   },
   {
     sec: 3, part: "L&B", weight: 20, title: "Employment Requirements",
+    read: "License Law Reference Book — employment & workers'-comp provisions (B&P §7125+) and the reprinted Labor Code excerpts.",
     lessons: [
       { key: "employee-vs-ic",
         title: "Employee vs. independent contractor (the ABC test)",
@@ -125,6 +135,7 @@ const SECTIONS = [
   },
   {
     sec: 4, part: "L&B", weight: 12, title: "Insurance & Liens",
+    read: "License Law Reference Book — bond provisions (B&P §7071.5–7071.11) and the Mechanics Lien Law (Civil Code §8000+) reprinted in the reference section.",
     lessons: [
       { key: "contractor-bonds",
         title: "Contractor bonds — what they actually protect",
@@ -150,6 +161,7 @@ const SECTIONS = [
   },
   {
     sec: 5, part: "L&B", weight: 21, title: "Contract Requirements & Execution",
+    read: "License Law Reference Book — Home Improvement Business (B&P §7150–7159.5) and contract-requirement provisions. Highest-weight L&B area — read it twice.",
     lessons: [
       { key: "contract-essentials",
         title: "Contract essentials & required elements",
@@ -185,6 +197,7 @@ const SECTIONS = [
   },
   {
     sec: 6, part: "L&B", weight: 5, title: "Public Works",
+    read: "License Law Reference Book / Labor Code excerpts — prevailing wage & public works (Labor Code §1720+, §1771, §1777.5). Small section (~5%) — don't over-invest.",
     lessons: [
       { key: "prevailing-wage-dir",
         title: "Prevailing wage & DIR registration",
@@ -200,6 +213,7 @@ const SECTIONS = [
   },
   {
     sec: 7, part: "L&B", weight: 14, title: "Safety (Law & Business)",
+    read: "License Law Reference Book — safety provisions; supplement with Cal/OSHA Title 8 §3203 (IIPP) and the Cal/OSHA construction pocket guide.",
     lessons: [
       { key: "iipp",
         title: "Injury & Illness Prevention Program (IIPP)",
@@ -227,6 +241,7 @@ const SECTIONS = [
   // ══ EXAM 2 — TRADE: GENERAL BUILDING (B) ══════════════════════════════════
   {
     sec: 8, part: "Trade", weight: 15, title: "Planning & Estimating",
+    read: "Ching, Building Construction Illustrated — Ch. 1 The Building Site & Ch. 2 The Building (loads, structural overview). Pair with any plan-reading primer for the drawing-set questions.",
     lessons: [
       { key: "reading-plans",
         title: "Reading plans & specifications",
@@ -252,6 +267,7 @@ const SECTIONS = [
   },
   {
     sec: 9, part: "Trade", weight: 20, title: "Framing & Structural Components",
+    read: "Ching, Building Construction Illustrated — Ch. 3 Foundation Systems, Ch. 4 Floor Systems, Ch. 5 Wall Systems, Ch. 6 Roof Systems. The visual core of the trade exam.",
     lessons: [
       { key: "foundations-concrete",
         title: "Foundations & concrete",
@@ -287,6 +303,7 @@ const SECTIONS = [
   },
   {
     sec: 10, part: "Trade", weight: 30, title: "Core Trades",
+    read: "Ching, Building Construction Illustrated — Ch. 1 The Building Site (site/earthwork), Ch. 7 Moisture & Thermal Protection, Ch. 11 Mechanical & Electrical Systems. Biggest section (30%) — spend the most time here.",
     lessons: [
       { key: "site-earthwork",
         title: "Site work, grading & drainage",
@@ -332,6 +349,7 @@ const SECTIONS = [
   },
   {
     sec: 11, part: "Trade", weight: 20, title: "Finish Trades",
+    read: "Ching, Building Construction Illustrated — Ch. 8 Doors & Windows, Ch. 10 Finish Work; exterior cladding & stucco in Ch. 7 Moisture & Thermal Protection.",
     lessons: [
       { key: "drywall-interior",
         title: "Drywall & interior wall systems",
@@ -367,6 +385,7 @@ const SECTIONS = [
   },
   {
     sec: 12, part: "Trade", weight: 15, title: "Safety (Trade)",
+    read: "Cal/OSHA Title 8, Construction Safety Orders (§1500+) — Ching is a methods text, not a safety code, so use Cal/OSHA directly for this section.",
     lessons: [
       { key: "fall-protection",
         title: "Fall protection & elevated work",
@@ -434,6 +453,7 @@ export function buildCurriculum() {
         section: sectionLabel,
         part: s.part,
         weight: s.weight,
+        read: s.read || "",
         wk: Math.max(1, Math.round((order / total) * 26)),
         title: l.title,
         objective: l.obj,
