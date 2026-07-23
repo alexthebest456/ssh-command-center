@@ -574,7 +574,7 @@ VIEWS.academy = {
         <div style="font-size:19px;font-weight:700;margin-top:6px">${esc(next.title)}</div>
         <div class="mono muted" style="font-size:11px;margin-top:3px">${esc(next.section)}</div>
         ${next.objective ? `<div class="mt" style="font-size:13px"><strong>Objective:</strong> ${esc(next.objective)}</div>` : ""}
-        ${next.content ? `<div class="mt" style="font-size:13px;white-space:pre-wrap">${esc(next.content)}</div>` : `<div class="muted mt" style="font-size:12.5px">Tell your mentor “teach me today's lesson” and I'll walk you through it — then mark it complete.</div>`}
+        ${next.content ? `<div class="mt" style="font-size:13px;white-space:pre-wrap">${esc(next.content)}</div>` : `<div class="muted mt" style="font-size:12.5px">Ask me — “Claude, teach me today's lesson” — and I'll explain it end to end until it clicks, then mark it complete.</div>`}
         ${next.cite ? `<div class="mono muted mt" style="font-size:10.5px">📖 Source: ${esc(next.cite)}</div>` : ""}
         <div class="mt"><button class="btn primary sm" data-lesson-done="${next.id}">✓ Complete lesson → next</button></div>
       </div>` : `<div class="panel mb"><div class="empty">🎉 Curriculum complete — you're ready for the exam.</div></div>`}
@@ -584,14 +584,20 @@ VIEWS.academy = {
         const doneBySec = {}; for (const l of all) { doneBySec[l.sec] = doneBySec[l.sec] || { d: 0, t: 0 }; doneBySec[l.sec].t++; if (l.status === "done") doneBySec[l.sec].d++; }
         const t = todayISO();
         const milestone = (icon, label, when, sub) => `<div class="flex between" style="padding:5px 0;border-bottom:1px dashed var(--line)"><div style="font-size:12.5px"><strong>${icon} ${esc(label)}</strong>${sub ? ` <span class="muted" style="font-size:11px">${esc(sub)}</span>` : ""}</div><div class="mono" style="font-size:11.5px">${esc(when)}</div></div>`;
+        const perDayTxt = plan.perDay === 1 ? "one lesson every weekday" : `${plan.perDay} lessons every weekday`;
+        const secLabel = (part) => { const rs = ranges.filter((r) => r.part === part); return rs.length ? `§${rs[0].sec}–§${rs[rs.length - 1].sec}` : ""; };
         return `<div class="panel mb">
-        <div class="panel-title"><span class="n">📅</span> Your 6-Month Plan — one lesson every weekday, starting ${esc(fmtShort(plan.start))}</div>
-        <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Weekdays = a new lesson; weekends = review + a practice-exam set. Finish all ${plan.sched.length} lessons by ${esc(fmtShort(plan.trEnd))}, then use the buffer to drill to 80%+ and sit each exam. Move faster anytime — “Complete lesson” always jumps you to the next one.</div>
+        <div class="panel-title"><span class="n">📅</span> Your Study Plan — ${perDayTxt}, starting ${esc(fmtShort(plan.start))}</div>
+        <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Paced to finish all ${plan.total} lessons by ${esc(fmtShort(plan.finish))} — that's ${perDayTxt} — leaving a buffer to drill to 80%+, sit both CSLB exams, and get licensed by ${esc(fmtShort(plan.examTarget))}. Weekends are for review + practice questions. Move faster anytime — “Complete lesson” always jumps you to the next one.</div>
         <div class="mb" style="font-size:11.5px">
-          ${milestone("📘", "Law & Business lessons", `${fmtShort(plan.lbStart)} – ${fmtShort(plan.lbEnd)}`, "§1–§7")}
+          ${plan.hasSplit ? `
+          ${milestone("📘", "Law & Business lessons", `${fmtShort(plan.lbStart)} – ${fmtShort(plan.lbEnd)}`, secLabel("L&B"))}
           ${milestone("🎯", "Take the L&B exam", fmtWeekday(plan.lbExam), "target")}
-          ${milestone("🔨", "Trade (General Building B) lessons", `${fmtShort(plan.trStart)} – ${fmtShort(plan.trEnd)}`, "§8–§12")}
+          ${milestone("🔨", "Trade lessons", `${fmtShort(plan.trStart)} – ${fmtShort(plan.trEnd)}`, secLabel("Trade"))}
+          ${milestone("🎯", "Take the Trade exam", fmtWeekday(plan.trExam), "target")}` : `
+          ${milestone("📚", "All lessons", `${fmtShort(plan.start)} – ${fmtShort(plan.finish)}`, `${plan.total} lessons`)}
           ${milestone("🎯", "Take the Trade exam", fmtWeekday(plan.trExam), "target")}
+          ${milestone("🎯", "Take the L&B exam", fmtWeekday(plan.lbExam), "target")}`}
           ${milestone("🎓", "Review buffer → licensed", `by ${fmtShort(plan.examTarget)}`, "practice exams + application")}
         </div>
         <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin-bottom:4px">SECTION-BY-SECTION CALENDAR</div>

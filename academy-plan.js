@@ -15,9 +15,14 @@
 //  date comparison.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const PLAN_VERSION = "cslb-plan-v1";
-export const PLAN_START = "2026-07-22";   // Day 1 — starts tomorrow
-export const EXAM_TARGET = "2026-12-15";  // overall "licensed by" goal
+export const PLAN_VERSION = "cslb-plan-v2";
+export const PLAN_START = "2026-07-22";      // Day 1 — starts tomorrow
+export const LESSONS_DONE_BY = "2026-10-30"; // finish all lessons by here, leaving ~6 weeks for exams + licensing
+export const EXAM_TARGET = "2026-12-15";     // overall "licensed by" goal
+
+// Pace is derived, not fixed: enough lessons per weekday to finish the WHOLE
+// curriculum (however many lessons it has) by LESSONS_DONE_BY. With 194 lessons
+// that lands around 3/weekday; with a leaner curriculum it drops toward 1.
 
 // ── local-date helpers (mirror app.js parseISO/toISO semantics) ──────────────
 function pd(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
@@ -29,33 +34,48 @@ function addDays(s, n) { const x = pd(s); x.setDate(x.getDate() + n); return iso
 function isWeekday(s) { const w = pd(s).getDay(); return w >= 1 && w <= 5; }
 export function nextWeekday(s) { let c = s; while (!isWeekday(c)) c = addDays(c, 1); return c; }
 export function daysBetween(a, b) { return Math.round((pd(b) - pd(a)) / 86400000); }
+// Count weekdays (Mon–Fri) from `start` through `end`, inclusive.
+export function weekdaysBetween(start, end) {
+  if (end < start) return 0;
+  let c = nextWeekday(start), n = 0, guard = 0;
+  while (c <= end && guard++ < 4000) { n++; c = nextWeekday(addDays(c, 1)); }
+  return n;
+}
 export function fmtShort(s) { return pd(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
 export function fmtWeekday(s) { return pd(s).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
 
-// ── schedule: one lesson per weekday ─────────────────────────────────────────
-export function scheduleLessons(ordered, start = PLAN_START) {
+// ── schedule: `perDay` lessons per weekday ───────────────────────────────────
+export function scheduleLessons(ordered, start = PLAN_START, perDay = 1) {
+  const rate = Math.max(1, perDay);
   let c = nextWeekday(start);
   return ordered.map((l, i) => {
     const item = { ...l, planDate: c, planDay: i + 1 };
-    c = nextWeekday(addDays(c, 1));
+    if ((i + 1) % rate === 0) c = nextWeekday(addDays(c, 1)); // advance after `rate` lessons
     return item;
   });
 }
 
 // ── full plan: schedule + track boundaries + exam target dates ───────────────
-export function buildPlan(ordered, start = PLAN_START) {
-  const sched = scheduleLessons(ordered, start);
+export function buildPlan(ordered, start = PLAN_START, doneBy = LESSONS_DONE_BY) {
+  const s0 = nextWeekday(start);
+  const total = ordered.length;
+  const perDay = Math.max(1, Math.ceil(total / Math.max(1, weekdaysBetween(s0, doneBy))));
+  const sched = scheduleLessons(ordered, s0, perDay);
+  const finish = sched.length ? sched[sched.length - 1].planDate : s0;
+
+  // A curriculum split into the two CSLB exams (part = "L&B" / "Trade") gets two
+  // exam milestones; a single combined curriculum gets both exams after finish.
   const lb = sched.filter((l) => l.part === "L&B");
   const tr = sched.filter((l) => l.part === "Trade");
-  const s0 = nextWeekday(start);
+  const hasSplit = lb.length > 0 && tr.length > 0;
   const lbStart = lb.length ? lb[0].planDate : s0;
-  const lbEnd = lb.length ? lb[lb.length - 1].planDate : s0;
-  const trStart = tr.length ? tr[0].planDate : lbEnd;
-  const trEnd = tr.length ? tr[tr.length - 1].planDate : lbEnd;
-  // ~1.5 weeks of review after the last lesson of each track, landing on a weekday.
-  const lbExam = nextWeekday(addDays(lbEnd, 10));
-  const trExam = nextWeekday(addDays(trEnd, 10));
-  return { start: s0, sched, lbStart, lbEnd, lbExam, trStart, trEnd, trExam, examTarget: EXAM_TARGET };
+  const lbEnd = lb.length ? lb[lb.length - 1].planDate : finish;
+  const trStart = tr.length ? tr[0].planDate : s0;
+  const trEnd = tr.length ? tr[tr.length - 1].planDate : finish;
+  const lbExam = nextWeekday(addDays(hasSplit ? lbEnd : finish, 7));
+  const trExam = nextWeekday(addDays(hasSplit ? trEnd : finish, 14));
+
+  return { start: s0, sched, perDay, total, finish, hasSplit, lbStart, lbEnd, lbExam, trStart, trEnd, trExam, examTarget: EXAM_TARGET };
 }
 
 // ── per-section calendar ranges (for the timeline UI) ────────────────────────
