@@ -16,7 +16,9 @@ const COLLECTIONS = [
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
-let currentView = localStorage.getItem("sshcc:view") || "myday";
+// The app always opens on the "Now" front door — one thing at a time, no wall
+// of dashboards. Navigation within a session still works normally.
+let currentView = "now";
 let calMonth = startOfMonth(new Date());
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -128,6 +130,7 @@ function renderField(f, val) {
 // ── Navigation ───────────────────────────────────────────────────────────────
 const NAV_GROUPS = [
   { title: "Personal OS", items: [
+    { id: "now", label: "⚡ Now" },
     { id: "myday", label: "My Day" },
     { id: "dailyos", label: "Daily Non-Negotiables" },
     { id: "goals", label: "Goals" },
@@ -266,6 +269,45 @@ function focusQueueHTML() {
   const one = oneThingTask();
   const q = rankedTasks().filter((t) => !one || t.id !== one.id).slice(0, 7);
   return q.length ? q.map(focusRow).join("") : `<div class="empty">Nothing else queued. 🎯</div>`;
+}
+
+// ── "Now" — one cross-domain focus queue (tasks + lesson + non-negotiables) ───
+// Skipped items are sent to the back of the line for the session (not persisted).
+const nowSkips = new Set();
+function fqTask(t) {
+  const dm = dueMeta(t.due), p = propName(t.propertyId);
+  return { kind: "task", id: t.id, icon: "✓", eyebrow: p ? "▦ " + p : "Task", title: t.title,
+    sub: dm ? dm.text : "no due date", why: whyOneThing(t), notes: t.notes || "",
+    done: `data-now-done-task="${t.id}"`, side: `data-now-edit="${t.id}"`, sideLabel: "✎ Details" };
+}
+function fqLesson(l) {
+  return { kind: "lesson", id: l.id, icon: "📚", eyebrow: `Academy · §${l.sec}`, title: l.title,
+    sub: l.objective || "Today's lesson toward your license", why: "Keeps Dec 15 on track", notes: l.content || "",
+    done: `data-now-done-lesson="${l.id}"`, side: `data-goto="academy"`, sideLabel: "Open Academy" };
+}
+function fqHabit(h) {
+  return { kind: "habit", id: h.id, icon: h.icon || "☀", eyebrow: "Non-negotiable", title: h.name,
+    sub: h.time || "part of your daily routine", why: "Daily", notes: "",
+    done: `data-now-done-habit="${h.id}"`, side: "", sideLabel: "" };
+}
+function focusQueue() {
+  const q = [], seen = new Set();
+  for (const t of openToday().slice().sort((a, b) => taskScore(b) - taskScore(a))) { q.push(fqTask(t)); seen.add(t.id); }
+  const lesson = academyNext();
+  if (lesson) q.push(fqLesson(lesson));
+  for (const h of dailyHabits()) if (!habitDone(h)) q.push(fqHabit(h));
+  for (const t of rankedTasks()) if (!seen.has(t.id)) { q.push(fqTask(t)); seen.add(t.id); }
+  const pid = focusPin();
+  if (pid) { const i = q.findIndex((x) => x.kind === "task" && x.id === pid); if (i > 0) q.unshift(q.splice(i, 1)[0]); }
+  const key = (x) => x.kind + ":" + x.id;
+  return [...q.filter((x) => !nowSkips.has(key(x))), ...q.filter((x) => nowSkips.has(key(x)))];
+}
+function doneTodayCount() {
+  const t0 = todayDate().getTime(), t1 = t0 + DAY, within = (ms) => ms >= t0 && ms < t1;
+  const tasks = state.tasks.filter((x) => x.status === "done" && x.doneAt && within(x.doneAt)).length;
+  const lessons = (state.academy || []).filter((x) => x.status === "done" && x.doneAt && within(x.doneAt)).length;
+  const habits = dailyHabits().filter((h) => habitDone(h)).length;
+  return tasks + lessons + habits;
 }
 
 // ── Lease / rent-increase math ────────────────────────────────────────────────
@@ -513,6 +555,69 @@ VIEWS.myday = {
     root.querySelectorAll("[data-one-done]").forEach((el) => el.addEventListener("click", () => { toggleTask(el.dataset.oneDone); localStorage.removeItem("sshcc:focus"); toast("Done. Next one loaded. 🎯"); }));
     root.querySelectorAll("[data-one-edit]").forEach((el) => el.addEventListener("click", () => editTask(el.dataset.oneEdit)));
     root.querySelectorAll("[data-set-focus]").forEach((el) => el.addEventListener("click", () => { setFocusPin(el.dataset.setFocus); render(); toast("Set as today's ONE Thing 🎯"); }));
+  },
+};
+
+// ── The front door · "Now" — one thing at a time ─────────────────────────────
+VIEWS.now = {
+  render() {
+    const q = focusQueue();
+    const one = q[0], rest = q.slice(1, 6), done = doneTodayCount();
+    const hr = new Date().getHours();
+    const greet = hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
+
+    if (!one) {
+      return `<div class="view"><div style="max-width:620px;margin:0 auto">
+        <div class="muted" style="font-size:15px;font-weight:600">${greet}.</div>
+        <div class="panel mt" style="text-align:center;padding:42px 20px">
+          <div style="font-size:44px">🎉</div>
+          <div style="font-size:20px;font-weight:800;margin-top:8px">You're clear.</div>
+          <div class="muted mt">Everything for today is handled${done ? ` — ${done} done` : ""}. Rest, or line up the next thing.</div>
+          <div class="flex mt" style="gap:8px;justify-content:center"><button class="btn primary sm" data-now-add>+ Add a task</button><button class="btn sm ghost" data-goto="myday">See everything →</button></div>
+        </div></div></div>`;
+    }
+
+    const big = `<div class="panel" style="border:1.5px solid var(--amber-line);background:var(--amber-soft);padding:22px">
+      <div class="flex between wrap"><div class="mono muted" style="font-size:11px">${one.icon} ${esc(one.eyebrow)}</div><span class="tag amber">${esc(one.why)}</span></div>
+      <div style="font-size:24px;font-weight:800;line-height:1.2;margin-top:10px">${esc(one.title)}</div>
+      ${one.sub ? `<div class="mono muted" style="font-size:12px;margin-top:6px">${esc(one.sub)}</div>` : ""}
+      ${one.notes ? `<div class="muted mt" style="font-size:13px;white-space:pre-wrap;max-height:150px;overflow:auto">${esc(one.notes)}</div>` : ""}
+      <div class="flex" style="gap:8px;margin-top:18px;flex-wrap:wrap">
+        <button class="btn primary" ${one.done}>✓ Done — load next</button>
+        <button class="btn sm ghost" data-now-skip="${one.kind}:${one.id}">skip for now</button>
+        ${one.side ? `<button class="btn sm ghost" ${one.side}>${esc(one.sideLabel)}</button>` : ""}
+      </div></div>`;
+
+    const mini = (i) => `<div class="row" style="opacity:.8"><div class="body"><div class="t" style="font-size:13px">${i.icon} ${esc(i.title)}</div><div class="m">${esc(i.eyebrow)}${i.sub ? ` · ${esc(i.sub)}` : ""}</div></div></div>`;
+
+    return `<div class="view"><div style="max-width:620px;margin:0 auto">
+      <div class="flex between" style="align-items:baseline">
+        <div style="font-size:15px;font-weight:600">${greet}.</div>
+        <div class="mono muted" style="font-size:11px">${done ? `🔥 ${done} done today` : "let's begin"}</div>
+      </div>
+      <div class="muted" style="font-size:11.5px;margin:2px 0 12px">Just this one thing. Finish it and the next loads automatically.</div>
+      ${big}
+      ${rest.length ? `<details style="margin-top:14px"><summary class="muted" style="cursor:pointer;font-size:12px">▾ ${rest.length} more in line</summary><div class="mt">${rest.map(mini).join("")}</div></details>` : ""}
+      <div style="text-align:center;margin-top:20px"><button class="btn sm ghost" data-goto="myday">See everything →</button></div>
+    </div></div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-now-done-task]").forEach((el) => el.addEventListener("click", () => {
+      const id = el.dataset.nowDoneTask; nowSkips.delete("task:" + id);
+      if (focusPin() === id) localStorage.removeItem("sshcc:focus");
+      toggleTask(id); toast("Done. Next one up. 🎯");
+    }));
+    root.querySelectorAll("[data-now-done-lesson]").forEach((el) => el.addEventListener("click", () => {
+      const id = el.dataset.nowDoneLesson; const l = state.academy.find((x) => x.id === id); if (!l) return;
+      DB.upsert("academy", { ...l, status: "done", doneAt: Date.now() }); toast("Lesson complete 🎓");
+    }));
+    root.querySelectorAll("[data-now-done-habit]").forEach((el) => el.addEventListener("click", () => {
+      const h = state.habits.find((x) => x.id === el.dataset.nowDoneHabit); if (h) { cycleHabit(h); toast("Nice — that's a non-negotiable done. 🔥"); }
+    }));
+    root.querySelectorAll("[data-now-skip]").forEach((el) => el.addEventListener("click", () => { nowSkips.add(el.dataset.nowSkip); render(); }));
+    root.querySelectorAll("[data-now-edit]").forEach((el) => el.addEventListener("click", () => editTask(el.dataset.nowEdit)));
+    root.querySelectorAll("[data-now-add]").forEach((el) => el.addEventListener("click", () => editTaskPrefill({ due: todayISO() })));
+    root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
   },
 };
 
