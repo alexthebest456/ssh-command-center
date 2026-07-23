@@ -17,7 +17,7 @@
 
 export const PLAN_VERSION = "cslb-plan-v1";
 export const PLAN_START = "2026-07-22";   // Day 1 — starts tomorrow
-export const EXAM_TARGET = "2026-12-31";  // overall "licensed by" goal
+export const EXAM_TARGET = "2026-12-15";  // overall "licensed by" goal
 
 // ── local-date helpers (mirror app.js parseISO/toISO semantics) ──────────────
 function pd(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }

@@ -541,7 +541,7 @@ VIEWS.academy = {
     const done = all.filter((l) => l.status === "done").length;
     const pct = all.length ? Math.round((done / all.length) * 100) : 0;
     const next = academyNext();
-    const dd = daysUntil("2026-12-31");
+    const dd = daysUntil("2026-12-15");
     const plan = buildPlan(all);
     const ps = planStatus(plan, todayISO(), done);
     const sections = {};
@@ -552,12 +552,12 @@ VIEWS.academy = {
     return `
     <div class="view">
       <div class="view-head"><div><div class="eyebrow">CSLB “B” Apprenticeship</div><h1>Contractor Academy</h1></div>
-        <div class="mono muted" style="font-size:11px">${done}/${all.length} lessons · ${dd}d to Dec 31</div></div>
+        <div class="mono muted" style="font-size:11px">${done}/${all.length} lessons · ${dd}d to Dec 15</div></div>
 
       <div class="grid cols-3 mb">
         <div class="stat"><div class="k">Program Progress</div><div class="v ${pct >= 100 ? "green" : "amber"}">${pct}%</div><div class="sub">${done}/${all.length} lessons</div></div>
         <div class="stat"><div class="k">Current Section</div><div class="v" style="font-size:16px">${next ? "§" + next.sec : "Done"}</div><div class="sub">${next ? esc(next.section) : "Exam time"}</div></div>
-        <div class="stat"><div class="k">Target</div><div class="v" style="font-size:16px">Dec 31</div><div class="sub">${dd} days out</div></div>
+        <div class="stat"><div class="k">Target</div><div class="v" style="font-size:16px">Dec 15</div><div class="sub">${dd} days out</div></div>
       </div>
 
       ${next ? `<div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
