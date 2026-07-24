@@ -1549,7 +1549,9 @@ function scheduleMetrics(p) {
     else if (overdue) { label = `Overdue ${Math.round((todayDate() - done) / DAY)}d`; color = "#dc5050"; }
     else if (behind > 3) { label = `${behind}d behind`; color = "#e0913a"; }
     else { label = "On track"; color = "var(--ok,#28b478)"; }
-    status = { label, color, plannedFrac, actualFrac };
+    const total = Math.max(1, Math.round((done - start) / DAY));
+    const elapsed = Math.round((todayDate() - start) / DAY);
+    status = { label, color, plannedFrac, actualFrac, elapsed, total, notStarted: elapsed < 0 };
   }
   return { stages, idx, n, start, done, phaseDates, actualFrac, status };
 }
@@ -1574,12 +1576,18 @@ function phaseScheduleList(sc, p) {
 function statusBar(sc) {
   if (!sc.status) return `<div class="mono muted" style="font-size:10px;margin-top:6px">Add a start date + finish date (Edit deal) to track schedule health.</div>`;
   const s = sc.status, fill = Math.round(s.actualFrac * 100), plan = Math.round(s.plannedFrac * 100);
-  return `<div style="position:relative;height:22px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:6px">
-      <div style="position:absolute;top:0;bottom:0;left:0;width:${fill}%;background:${s.color};opacity:.30"></div>
-      <div style="position:absolute;top:-1px;bottom:-1px;left:${plan}%;width:2px;background:var(--ink,#888)"></div>
+  const mk = Math.min(97, Math.max(3, plan)); // keep the TODAY marker on-screen even near the ends
+  const timePct = plan, workPct = fill, lead = workPct - timePct;
+  const readout = s.notStarted
+    ? `Starts in ${-s.elapsed}d — not begun yet`
+    : `Today: day ${s.elapsed} of ${s.total} (${timePct}% of schedule) · work done ${workPct}% · ${lead >= 0 ? `${lead}% ahead` : `${-lead}% behind`}`;
+  return `<div style="position:relative;height:24px;border-radius:6px;background:var(--line);overflow:visible;margin-top:20px">
+      <div style="position:absolute;top:0;bottom:0;left:0;width:${fill}%;background:${s.color};opacity:.30;border-radius:6px"></div>
+      <div style="position:absolute;top:-6px;bottom:-6px;left:${mk}%;width:2px;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.6)"></div>
+      <div class="mono" style="position:absolute;top:-17px;left:${mk}%;transform:translateX(-50%);font-size:8px;font-weight:800;color:#fff;white-space:nowrap">▼ TODAY</div>
       <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${s.color}">${esc(s.label)}</div>
     </div>
-    <div class="mono muted" style="font-size:9px;margin-top:3px;text-align:right">fill = your progress · line = where you should be today</div>`;
+    <div class="mono muted" style="font-size:9px;margin-top:6px">${esc(readout)}</div>`;
 }
 
 function projectCard(p) {
