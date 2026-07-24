@@ -1448,7 +1448,8 @@ VIEWS.builds = {
 // Deal economics — the investor-facing returns, computed from entered numbers.
 function dealMetrics(p) {
   const num = (x) => { const n = Number(String(x ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; };
-  const purchase = num(p.purchasePrice), rehab = num(p.rehabBudget), other = num(p.otherCosts), arv = num(p.arv);
+  const cat = num(p.hardCosts) + num(p.softCosts) + num(p.permitCosts);
+  const purchase = num(p.purchasePrice), rehab = cat > 0 ? cat : num(p.rehabBudget), other = num(p.otherCosts), arv = num(p.arv);
   const allIn = purchase + rehab + other;
   const profit = arv - allIn;
   const roi = allIn ? (profit / allIn) * 100 : 0;
@@ -1459,12 +1460,31 @@ function dealMetrics(p) {
 // Budget baseline = the rehab/construction budget you set when underwriting.
 function budgetMetrics(p) {
   const num = (x) => { const n = Number(String(x ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; };
-  const budget = num(p.rehabBudget), spent = num(p.spentToDate), toComplete = num(p.costToComplete);
+  const hard = num(p.hardCosts), soft = num(p.softCosts), permit = num(p.permitCosts);
+  const cat = hard + soft + permit;
+  const budget = cat > 0 ? cat : num(p.rehabBudget); // total budget = itemized categories, else the single figure
+  const spent = num(p.spentToDate), toComplete = num(p.costToComplete);
   const eac = toComplete > 0 ? spent + toComplete : Math.max(budget, spent); // estimate at completion
   const remaining = Math.max(0, eac - spent);
   const variance = budget - eac;                    // + = under budget, − = over
   const pctSpent = budget ? Math.round((spent / budget) * 100) : 0;
-  return { budget, spent, toComplete, eac, remaining, variance, pctSpent, hasBudget: budget > 0, over: variance < 0 };
+  return { hard, soft, permit, budget, spent, toComplete, eac, remaining, variance, pctSpent, hasBudget: budget > 0, hasCats: cat > 0, over: variance < 0 };
+}
+function costBreakdown(b) {
+  if (!b.hasCats) return "";
+  const col = b.over ? "#dc5050" : "var(--ok,#28b478)";
+  const cell = (k, v, cls = "") => `<div><div class="mono muted" style="font-size:9px;letter-spacing:.02em">${k}</div><div style="font-size:13.5px;font-weight:800;${cls}">${v}</div></div>`;
+  return `<div style="margin-top:8px;padding:11px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2,transparent)">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      ${cell("HARD COSTS", money0(b.hard))}
+      ${cell("SOFT COSTS", money0(b.soft))}
+      ${cell("PERMIT COSTS", money0(b.permit))}
+    </div>
+    <div class="flex between" style="margin-top:9px;padding-top:8px;border-top:1px solid var(--line);align-items:flex-end">
+      ${cell("TOTAL COSTS", money0(b.budget))}
+      <div style="text-align:right"><div class="mono muted" style="font-size:9px">OVER / UNDER BUDGET</div><div style="font-size:15px;font-weight:800;color:${col}">${b.variance < 0 ? "−" + money0(-b.variance) : money0(b.variance)}</div></div>
+    </div>
+  </div>`;
 }
 function budgetLine(b) {
   const col = b.over ? "#dc5050" : "var(--ok,#28b478)";
@@ -1592,6 +1612,7 @@ function projectCard(p) {
 
     <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
     ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
+    ${costBreakdown(b)}
 
     <details style="margin-top:10px">
       <summary class="muted" style="cursor:pointer;font-size:12px">▾ Full timeline, budget, returns &amp; tasks</summary>
@@ -1684,7 +1705,10 @@ function editProperty(id) {
       { key: "startDate", label: "Start date (for the schedule bar)", type: "date" },
       { key: "targetDate", label: "Finish / target date", type: "date" },
       { key: "purchasePrice", label: "Purchase price ($)" },
-      { key: "rehabBudget", label: "Projected cost / construction budget ($)" },
+      { key: "hardCosts", label: "Hard costs — construction ($)" },
+      { key: "softCosts", label: "Soft costs — design, engineering, fees ($)" },
+      { key: "permitCosts", label: "Permit / city fees ($)" },
+      { key: "rehabBudget", label: "Or a single construction budget, if not itemized ($)" },
       { key: "spentToDate", label: "Actually spent to date ($)" },
       { key: "costToComplete", label: "Est. cost to complete ($)" },
       { key: "otherCosts", label: "Other costs — holding, closing, financing ($)" },
