@@ -128,22 +128,26 @@ function renderField(f, val) {
 }
 
 // ── Navigation ───────────────────────────────────────────────────────────────
-const NAV_GROUPS = [
-  { title: "Personal OS", items: [
-    { id: "now", label: "⚡ Now" },
-    { id: "myday", label: "My Day" },
+// The four screens you actually work in, always visible. Everything else is
+// tucked under "More" so the sidebar is calm, not a wall of 19 options.
+const NAV_ESSENTIALS = [
+  { id: "now", label: "⚡ Now" },
+  { id: "builds", label: "🏗 Active Projects" },
+  { id: "academy", label: "🎓 Academy" },
+  { id: "myday", label: "📅 My Day" },
+];
+const NAV_MORE = [
+  { title: "Daily", items: [
     { id: "dailyos", label: "Daily Non-Negotiables" },
     { id: "goals", label: "Goals" },
     { id: "reading", label: "Reading" },
-    { id: "academy", label: "Contractor Academy" },
   ]},
-  { title: "Focus", items: [
+  { title: "Tasks", items: [
     { id: "capture", label: "Capture" },
     { id: "horizon", label: "2-Week Horizon" },
     { id: "backlog", label: "Backlog" },
   ]},
   { title: "Properties", items: [
-    { id: "builds", label: "Active Projects" },
     { id: "calendar", label: "Property Calendar" },
     { id: "maintenance", label: "Maintenance" },
     { id: "leases", label: "Leases & Rent" },
@@ -173,19 +177,25 @@ function badgeFor(id) {
   return "";
 }
 
+function navBtn(item) {
+  const b = badgeFor(item.id);
+  return `<button class="nav-item ${item.id === currentView ? "active" : ""}" data-nav="${item.id}">
+    <span class="dot"></span>
+    <span class="label">${esc(item.label)}</span>
+    ${b ? `<span class="badge">${b}</span>` : ""}
+  </button>`;
+}
 function renderNav() {
-  $("#nav").innerHTML = NAV_GROUPS.map((g) => `
+  const moreActive = NAV_MORE.some((g) => g.items.some((it) => it.id === currentView));
+  $("#nav").innerHTML = `
     <div class="nav-group">
-      <div class="nav-group-title">${esc(g.title)}</div>
-      ${g.items.map((item) => {
-        const b = badgeFor(item.id);
-        return `<button class="nav-item ${item.id === currentView ? "active" : ""}" data-nav="${item.id}">
-          <span class="dot"></span>
-          <span class="label">${esc(item.label)}</span>
-          ${b ? `<span class="badge">${b}</span>` : ""}
-        </button>`;
-      }).join("")}
-    </div>`).join("");
+      <div class="nav-group-title">Focus</div>
+      ${NAV_ESSENTIALS.map(navBtn).join("")}
+    </div>
+    <details class="nav-more" ${moreActive ? "open" : ""}>
+      <summary class="nav-group-title" style="cursor:pointer;list-style:none;user-select:none">More ▾</summary>
+      ${NAV_MORE.map((g) => `<div class="nav-group"><div class="nav-group-title">${esc(g.title)}</div>${g.items.map(navBtn).join("")}</div>`).join("")}
+    </details>`;
   $("#nav").querySelectorAll("[data-nav]").forEach((b) =>
     b.addEventListener("click", () => go(b.dataset.nav)));
 }
