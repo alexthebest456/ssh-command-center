@@ -1330,15 +1330,22 @@ VIEWS.builds = {
     const active = activeBuilds();
     const pipeline = pipelineDeals().slice().sort((a, b) => (a.targetDate || "9999").localeCompare(b.targetDate || "9999"));
     const totalProfit = active.reduce((s, p) => { const m = dealMetrics(p); return s + (m.hasReturns ? m.profit : 0); }, 0);
+    const bAll = active.map(budgetMetrics);
+    const totBudget = bAll.reduce((s, x) => s + x.budget, 0);
+    const totSpent = bAll.reduce((s, x) => s + x.spent, 0);
+    const totEac = bAll.reduce((s, x) => s + x.eac, 0);
+    const totVar = bAll.reduce((s, x) => s + x.variance, 0);
     return `
     <div class="view">
       <div class="view-head"><div><div class="eyebrow">Portfolio</div><h1>Active Projects</h1></div>
         <button class="btn primary" data-new-build>+ New project</button></div>
 
-      <div class="grid cols-3 mb">
-        <div class="stat"><div class="k">Active</div><div class="v">${active.length}</div><div class="sub">in progress</div></div>
-        <div class="stat"><div class="k">Pipeline</div><div class="v ${pipeline.length ? "amber" : ""}">${pipeline.length}</div><div class="sub">coming up</div></div>
-        <div class="stat"><div class="k">Projected Profit</div><div class="v ${totalProfit ? "green" : ""}" style="font-size:20px">${totalProfit ? money0(totalProfit) : "—"}</div><div class="sub">active deals</div></div>
+      <div class="mono muted" style="font-size:11.5px;margin-bottom:8px">${active.length} active · ${pipeline.length} pipeline${totalProfit ? ` · projected profit <span style="color:var(--ok,#28b478);font-weight:700">${money0(totalProfit)}</span>` : ""}</div>
+      <div class="grid cols-4 mb">
+        <div class="stat"><div class="k">Total Budget</div><div class="v" style="font-size:20px">${totBudget ? money0(totBudget) : "—"}</div><div class="sub">projected cost</div></div>
+        <div class="stat"><div class="k">Spent to Date</div><div class="v" style="font-size:20px">${totSpent ? money0(totSpent) : "—"}</div><div class="sub">${totBudget ? Math.round(totSpent / totBudget * 100) + "% of budget" : "actual"}</div></div>
+        <div class="stat"><div class="k">Projected Final</div><div class="v" style="font-size:20px">${totEac ? money0(totEac) : "—"}</div><div class="sub">est. at completion</div></div>
+        <div class="stat"><div class="k">Over / Under</div><div class="v ${totVar < 0 ? "red" : totBudget ? "green" : ""}" style="font-size:20px">${totBudget ? (totVar < 0 ? "−" + money0(-totVar) : money0(totVar)) : "—"}</div><div class="sub">${totBudget ? (totVar < 0 ? "over budget" : "under budget") : "vs budget"}</div></div>
       </div>
 
       ${active.length ? active.map(projectCard).join("") : `<div class="empty">No active projects yet. Open a property and set its Type to “Active project” to track it here.</div>`}
@@ -1371,6 +1378,43 @@ function dealMetrics(p) {
   const margin = arv ? (profit / arv) * 100 : 0;
   return { purchase, rehab, other, arv, allIn, profit, roi, margin, hasReturns: arv > 0 && allIn > 0 };
 }
+// Budget control — projected cost vs. actual spent vs. estimate-at-completion.
+// Budget baseline = the rehab/construction budget you set when underwriting.
+function budgetMetrics(p) {
+  const num = (x) => { const n = Number(String(x ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; };
+  const budget = num(p.rehabBudget), spent = num(p.spentToDate), toComplete = num(p.costToComplete);
+  const eac = toComplete > 0 ? spent + toComplete : Math.max(budget, spent); // estimate at completion
+  const remaining = Math.max(0, eac - spent);
+  const variance = budget - eac;                    // + = under budget, − = over
+  const pctSpent = budget ? Math.round((spent / budget) * 100) : 0;
+  return { budget, spent, toComplete, eac, remaining, variance, pctSpent, hasBudget: budget > 0, over: variance < 0 };
+}
+function budgetLine(b) {
+  const col = b.over ? "#dc5050" : "var(--ok,#28b478)";
+  const tag = b.over ? `▲ over ${money0(-b.variance)}` : `▼ under ${money0(b.variance)}`;
+  return `<div class="mono" style="margin-top:8px;font-size:11.5px">💰 Budget ${money0(b.budget)} · Spent ${money0(b.spent)} (${b.pctSpent}%) · Final <span style="font-weight:700;color:${col}">${money0(b.eac)}</span> <span style="color:${col}">${tag}</span></div>`;
+}
+function budgetBlock(b) {
+  const col = b.over ? "#dc5050" : "var(--ok,#28b478)";
+  const denom = Math.max(b.budget, b.eac, 1);
+  const spentW = Math.min(100, (b.spent / denom) * 100), remW = Math.min(100 - spentW, (b.remaining / denom) * 100);
+  const budgetMark = Math.min(100, (b.budget / denom) * 100);
+  const cell = (k, v, cls = "") => `<div><div class="mono muted" style="font-size:9.5px">${k}</div><div style="font-size:14px;font-weight:800;${cls}">${v}</div></div>`;
+  return `<div style="padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2,transparent)">
+    <div class="grid cols-4" style="gap:10px">
+      ${cell("PROJECTED", money0(b.budget))}
+      ${cell("SPENT", money0(b.spent))}
+      ${cell("EST. TO FINISH", money0(b.remaining))}
+      ${cell("PROJECTED FINAL", money0(b.eac), "color:" + col)}
+    </div>
+    <div style="display:flex;height:9px;border-radius:6px;overflow:hidden;background:var(--line);margin-top:10px;position:relative">
+      <div style="width:${spentW}%;background:${col}"></div>
+      <div style="width:${remW}%;background:${col};opacity:.35"></div>
+      <div style="position:absolute;left:${budgetMark}%;top:-2px;bottom:-2px;width:2px;background:var(--ink,#333)" title="budget"></div>
+    </div>
+    <div class="mono muted" style="font-size:9.5px;margin-top:4px">Solid = spent · faded = still to spend · line = budget · ${b.over ? `over by ${money0(-b.variance)}` : `${money0(b.variance)} under`}</div>
+  </div>`;
+}
 function returnsBlock(m) {
   const cell = (k, v, cls = "") => `<div><div class="mono muted" style="font-size:9.5px;letter-spacing:.03em">${k}</div><div style="font-size:15px;font-weight:800;${cls}">${v}</div></div>`;
   const good = m.profit >= 0 ? "color:var(--ok,#28b478)" : "color:#dc5050";
@@ -1390,6 +1434,7 @@ function projectCard(p) {
   const idx = p.stageIndex ?? 0;
   const pct = Math.round((idx / Math.max(1, stages.length - 1)) * 100);
   const m = dealMetrics(p);
+  const b = budgetMetrics(p);
   const photos = state.photos.filter((ph) => ph.propertyId === p.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const tasks = openTasks().filter((t) => t.propertyId === p.id);
   const nextStep = p.nextStep || (tasks[0] && tasks[0].title) || "Set the next step in Edit deal";
@@ -1415,11 +1460,13 @@ function projectCard(p) {
     <div class="bar" style="margin-top:6px"><span class="ok" style="width:${pct}%"></span></div>
 
     <div style="margin-top:10px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
+    ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
 
     <details style="margin-top:10px">
-      <summary class="muted" style="cursor:pointer;font-size:12px">▾ Full timeline, returns &amp; tasks</summary>
+      <summary class="muted" style="cursor:pointer;font-size:12px">▾ Full timeline, budget, returns &amp; tasks</summary>
       <div class="mt">
-        ${m.hasReturns ? returnsBlock(m) + `<div class="mono muted" style="font-size:10px;margin-top:6px">All-in = purchase ${money0(m.purchase)} + rehab ${money0(m.rehab)}${m.other ? " + costs " + money0(m.other) : ""}.</div>` : `<div class="empty" style="padding:12px">No deal numbers yet. <button class="btn sm" data-edit-prop="${p.id}">Add returns</button></div>`}
+        ${b.hasBudget ? `<div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin-bottom:4px">BUDGET — PROJECTED vs ACTUAL</div>${budgetBlock(b)}` : ""}
+        ${m.hasReturns ? `<div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">RETURNS</div>` + returnsBlock(m) + `<div class="mono muted" style="font-size:10px;margin-top:6px">All-in = purchase ${money0(m.purchase)} + rehab ${money0(m.rehab)}${m.other ? " + costs " + money0(m.other) : ""}.</div>` : `<div class="empty" style="padding:12px">No deal numbers yet. <button class="btn sm" data-edit-prop="${p.id}">Add returns</button></div>`}
 
         <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">TIMELINE — tap a step to set where you are</div>
         <div class="stages">${stages.map((s, i) => `<span class="stage-chip ${i < idx ? "done" : i === idx ? "current" : ""}" data-stage="${i}" data-prop-id="${p.id}">${esc(s)}</span>`).join("")}</div>
@@ -1503,7 +1550,9 @@ function editProperty(id) {
       { key: "nextStep", label: "Next step (shown on the card)" },
       { key: "targetDate", label: "Target / key date", type: "date" },
       { key: "purchasePrice", label: "Purchase price ($)" },
-      { key: "rehabBudget", label: "Rehab / construction budget ($)" },
+      { key: "rehabBudget", label: "Projected cost / construction budget ($)" },
+      { key: "spentToDate", label: "Actually spent to date ($)" },
+      { key: "costToComplete", label: "Est. cost to complete ($)" },
       { key: "otherCosts", label: "Other costs — holding, closing, financing ($)" },
       { key: "arv", label: "Finished value / ARV / sellout ($)" },
       { key: "permitStart", label: "Permit clock start", type: "date" },
