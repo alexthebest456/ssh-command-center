@@ -300,13 +300,20 @@ function fqHabit(h) {
     sub: h.time || "part of your daily routine", why: "Daily", notes: "",
     done: `data-now-done-habit="${h.id}"`, side: "", sideLabel: "" };
 }
+// A task tied to a not-yet-closed (pipeline) deal shouldn't nag you up front —
+// there's nothing to do on it until the deal actually closes.
+function isPipelineTask(t) {
+  if (!t.propertyId) return false;
+  const p = state.properties.find((x) => x.id === t.propertyId);
+  return !!p && p.kind === "pipeline";
+}
 function focusQueue() {
   const q = [], seen = new Set();
-  for (const t of openToday().slice().sort((a, b) => taskScore(b) - taskScore(a))) { q.push(fqTask(t)); seen.add(t.id); }
+  for (const t of openToday().filter((t) => !isPipelineTask(t)).sort((a, b) => taskScore(b) - taskScore(a))) { q.push(fqTask(t)); seen.add(t.id); }
   const lesson = academyNext();
   if (lesson) q.push(fqLesson(lesson));
   for (const h of dailyHabits()) if (!habitDone(h)) q.push(fqHabit(h));
-  for (const t of rankedTasks()) if (!seen.has(t.id)) { q.push(fqTask(t)); seen.add(t.id); }
+  for (const t of rankedTasks()) if (!seen.has(t.id) && !isPipelineTask(t)) { q.push(fqTask(t)); seen.add(t.id); }
   const pid = focusPin();
   if (pid) { const i = q.findIndex((x) => x.kind === "task" && x.id === pid); if (i > 0) q.unshift(q.splice(i, 1)[0]); }
   const key = (x) => x.kind + ":" + x.id;
