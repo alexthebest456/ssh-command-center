@@ -250,8 +250,8 @@ const STATUS_UPDATES = [
     nextStep: "Ready to build ~Aug 1 — 3.5-month build", targetDate: "2026-11-15" },
   { match: ["prop-painter-11912", "painter"], kind: "active-build", phase: "active", stageIndex: 1, stage: "Design / Plans",
     nextStep: "Run numbers & decide scope by Aug 1 — 6-month planning", targetDate: "2027-02-01" },
-  { match: ["prop-140-12th", "140 12th", "12th st"], kind: "active-build", phase: "active", stageIndex: 2, stage: "Permitting",
-    nextStep: "Tenants out Nov 30 · remodel units Dec–Jan · ADU permits ~6 mo out · then ~1 mo to re-tenant", targetDate: "2027-01-31" },
+  { match: ["prop-140-12th", "140 12th", "12th st"], kind: "active-build", phase: "active", stageIndex: 1, stage: "Design / Plans",
+    nextStep: "ADU: ~1 mo architect plans → ~6 mo city planning/permits · tenants out Nov 30, remodel units Dec–Jan", targetDate: "2027-02-28" },
   { match: ["prop-tweedy", "tweedy"], phase: "land",
     nextStep: "Analyze land & decide what to build — screen architects" },
   { match: ["prop-fidel", "fidel"], phase: "land",
@@ -265,7 +265,7 @@ const STATUS_UPDATES = [
 ];
 
 export async function applyPortfolioStatuses() {
-  if (localStorage.getItem("sshcc:portfolio-status-v2")) return;
+  if (localStorage.getItem("sshcc:portfolio-status-v3")) return;
   const props = DB.getAll("properties");
   if (!props.length) return; // data not loaded yet — try again next boot (guard not set)
   let applied = 0;
@@ -282,6 +282,6 @@ export async function applyPortfolioStatuses() {
     await DB.upsert("properties", { ...target, ...fields });
     applied++;
   }
-  localStorage.setItem("sshcc:portfolio-status-v2", "1");
+  localStorage.setItem("sshcc:portfolio-status-v3", "1");
   console.log(`Portfolio status correction applied to ${applied} propert${applied === 1 ? "y" : "ies"}.`);
 }
