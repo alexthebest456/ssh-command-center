@@ -143,7 +143,7 @@ const NAV_GROUPS = [
     { id: "backlog", label: "Backlog" },
   ]},
   { title: "Properties", items: [
-    { id: "builds", label: "Active Builds" },
+    { id: "builds", label: "Active Projects" },
     { id: "calendar", label: "Property Calendar" },
     { id: "maintenance", label: "Maintenance" },
     { id: "leases", label: "Leases & Rent" },
@@ -1323,15 +1323,31 @@ function permitStatus(p) {
   return { label, cls, pct, remaining };
 }
 
+function pipelineDeals() { return state.properties.filter((p) => p.kind === "pipeline"); }
+
 VIEWS.builds = {
   render() {
-    const builds = activeBuilds();
+    const active = activeBuilds();
+    const pipeline = pipelineDeals().slice().sort((a, b) => (a.targetDate || "9999").localeCompare(b.targetDate || "9999"));
+    const totalProfit = active.reduce((s, p) => { const m = dealMetrics(p); return s + (m.hasReturns ? m.profit : 0); }, 0);
     return `
     <div class="view">
-      <div class="view-head"><div><div class="eyebrow">Construction</div><h1>Active Builds</h1></div>
-        <div class="flex"><button class="btn" data-manage-props>Manage properties</button>
-        <button class="btn primary" data-new-build>+ New build</button></div></div>
-      ${builds.length ? builds.map(buildCard).join("") : `<div class="empty">No active builds. Mark a property as an active build to track it here.</div>`}
+      <div class="view-head"><div><div class="eyebrow">Portfolio</div><h1>Active Projects</h1></div>
+        <button class="btn primary" data-new-build>+ New project</button></div>
+
+      <div class="grid cols-3 mb">
+        <div class="stat"><div class="k">Active</div><div class="v">${active.length}</div><div class="sub">in progress</div></div>
+        <div class="stat"><div class="k">Pipeline</div><div class="v ${pipeline.length ? "amber" : ""}">${pipeline.length}</div><div class="sub">coming up</div></div>
+        <div class="stat"><div class="k">Projected Profit</div><div class="v ${totalProfit ? "green" : ""}" style="font-size:20px">${totalProfit ? money0(totalProfit) : "—"}</div><div class="sub">active deals</div></div>
+      </div>
+
+      ${active.length ? active.map(projectCard).join("") : `<div class="empty">No active projects yet. Open a property and set its Type to “Active project” to track it here.</div>`}
+
+      <div class="panel mt">
+        <div class="panel-title"><span class="n">⏭</span> Coming Up — pipeline</div>
+        <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Deals under contract or queued next, sorted by date — so you can plan ahead.</div>
+        ${pipeline.length ? pipeline.map(pipelineRow).join("") : `<div class="empty">Nothing in the pipeline. Set a property's Type to “Pipeline” to plan it here.</div>`}
+      </div>
     </div>`;
   },
   mount(root) {
@@ -1341,56 +1357,94 @@ VIEWS.builds = {
       el.addEventListener("change", (e) => handlePhotoUpload(el.dataset.photoInput, e.target.files)));
     root.querySelectorAll("[data-del-photo]").forEach((el) => el.addEventListener("click", () => { if (confirm("Delete photo?")) DB.remove("photos", el.dataset.delPhoto); }));
     root.querySelectorAll("[data-new-build]").forEach((el) => el.addEventListener("click", () => newBuild()));
-    root.querySelectorAll("[data-manage-props]").forEach((el) => el.addEventListener("click", () => go("data")));
     root.querySelectorAll("[data-add-build-task]").forEach((el) => el.addEventListener("click", () => quickTaskFor(el.dataset.addBuildTask)));
   },
 };
 
-function buildCard(p) {
+// Deal economics — the investor-facing returns, computed from entered numbers.
+function dealMetrics(p) {
+  const num = (x) => { const n = Number(String(x ?? "").replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; };
+  const purchase = num(p.purchasePrice), rehab = num(p.rehabBudget), other = num(p.otherCosts), arv = num(p.arv);
+  const allIn = purchase + rehab + other;
+  const profit = arv - allIn;
+  const roi = allIn ? (profit / allIn) * 100 : 0;
+  const margin = arv ? (profit / arv) * 100 : 0;
+  return { purchase, rehab, other, arv, allIn, profit, roi, margin, hasReturns: arv > 0 && allIn > 0 };
+}
+function returnsBlock(m) {
+  const cell = (k, v, cls = "") => `<div><div class="mono muted" style="font-size:9.5px;letter-spacing:.03em">${k}</div><div style="font-size:15px;font-weight:800;${cls}">${v}</div></div>`;
+  const good = m.profit >= 0 ? "color:var(--ok,#28b478)" : "color:#dc5050";
+  return `<div class="grid cols-4" style="gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2,transparent)">
+    ${cell("ALL-IN COST", money0(m.allIn))}
+    ${cell("VALUE / ARV", money0(m.arv))}
+    ${cell("PROJECTED PROFIT", money0(m.profit), good)}
+    ${cell("ROI · MARGIN", `${m.roi.toFixed(0)}% · ${m.margin.toFixed(0)}%`, good)}
+  </div>`;
+}
+
+// One clean, investor-readable project card: returns up top, a timeline with the
+// current step, and the next steps — with the busy detail tucked into an expander.
+function projectCard(p) {
   const c = permitStatus(p);
   const stages = p.stages && p.stages.length ? p.stages : DEFAULT_STAGES;
   const idx = p.stageIndex ?? 0;
+  const pct = Math.round((idx / Math.max(1, stages.length - 1)) * 100);
+  const m = dealMetrics(p);
   const photos = state.photos.filter((ph) => ph.propertyId === p.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const tasks = openTasks().filter((t) => t.propertyId === p.id).slice(0, 5);
+  const tasks = openTasks().filter((t) => t.propertyId === p.id);
+  const nextStep = p.nextStep || (tasks[0] && tasks[0].title) || "Set the next step in Edit deal";
+  const tgt = p.targetDate ? dueMeta(p.targetDate) : null;
   return `
-  <div class="panel mb">
-    <div class="flex between wrap" style="align-items:flex-start">
+  <div class="panel mb" style="padding:16px">
+    <div class="flex between wrap" style="align-items:flex-start;gap:10px">
       <div>
-        <div class="panel-title" style="margin:0"><span class="n">⚑</span> ${esc(p.name)}</div>
-        <div class="mono muted" style="font-size:11px;margin-top:4px">${esc(p.address || "no address")} · stage: ${esc(stages[idx] || "—")}</div>
+        <div style="font-size:17px;font-weight:800">${esc(p.name)}</div>
+        <div class="mono muted" style="font-size:11px;margin-top:2px">${esc(p.address || "no address")}</div>
       </div>
       <div style="text-align:right">
-        <div class="mono muted" style="font-size:10px">PERMIT CLOCK</div>
-        <div class="clock ${c.cls}">${c.label}</div>
+        ${m.hasReturns
+          ? `<div style="font-size:19px;font-weight:800;${m.profit >= 0 ? "color:var(--ok,#28b478)" : "color:#dc5050"}">${money0(m.profit)}</div><div class="mono muted" style="font-size:10px">projected profit · ${m.roi.toFixed(0)}% ROI</div>`
+          : `<button class="btn sm ghost" data-edit-prop="${p.id}">+ Add returns</button>`}
       </div>
     </div>
 
-    <div class="bar"><span class="${c.cls === "late" ? "late" : c.cls === "ok" ? "ok" : ""}" style="width:${c.pct}%"></span></div>
-    ${p.permitStart ? `<div class="mono muted" style="font-size:10px;margin-top:5px">clock started ${fmtDate(p.permitStart)} · ${esc(String(p.permitDays || "?"))}-day permit</div>` : `<div class="mono muted" style="font-size:10px;margin-top:5px">no permit clock set — edit to add one</div>`}
-
-    <div class="stages">
-      ${stages.map((s, i) => `<span class="stage-chip ${i < idx ? "done" : i === idx ? "current" : ""}" data-stage="${i}" data-prop-id="${p.id}">${esc(s)}</span>`).join("")}
+    <div class="flex between" style="margin-top:12px;align-items:baseline;gap:8px">
+      <span class="tag amber">Now: ${esc(stages[idx] || "—")}</span>
+      <div class="mono muted" style="font-size:10.5px">Step ${idx + 1} of ${stages.length}${c.label !== "no clock" ? ` · permit ${c.label}` : ""}${tgt ? ` · target ${tgt.text}` : ""}</div>
     </div>
+    <div class="bar" style="margin-top:6px"><span class="ok" style="width:${pct}%"></span></div>
 
-    <div class="grid cols-2 mt">
-      <div>
-        <div class="panel-title" style="font-size:10px"><span class="n">▸</span> Open tasks</div>
-        ${tasks.length ? tasks.map(taskRow).join("") : `<div class="empty" style="padding:14px">No open tasks</div>`}
-        <button class="btn sm mt" data-add-build-task="${p.id}">+ Task for ${esc(p.name)}</button>
+    <div style="margin-top:10px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
+
+    <details style="margin-top:10px">
+      <summary class="muted" style="cursor:pointer;font-size:12px">▾ Full timeline, returns &amp; tasks</summary>
+      <div class="mt">
+        ${m.hasReturns ? returnsBlock(m) + `<div class="mono muted" style="font-size:10px;margin-top:6px">All-in = purchase ${money0(m.purchase)} + rehab ${money0(m.rehab)}${m.other ? " + costs " + money0(m.other) : ""}.</div>` : `<div class="empty" style="padding:12px">No deal numbers yet. <button class="btn sm" data-edit-prop="${p.id}">Add returns</button></div>`}
+
+        <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">TIMELINE — tap a step to set where you are</div>
+        <div class="stages">${stages.map((s, i) => `<span class="stage-chip ${i < idx ? "done" : i === idx ? "current" : ""}" data-stage="${i}" data-prop-id="${p.id}">${esc(s)}</span>`).join("")}</div>
+
+        <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">NEXT STEPS / TASKS</div>
+        ${tasks.length ? tasks.slice(0, 6).map(taskRow).join("") : `<div class="empty" style="padding:10px">No open tasks</div>`}
+        <button class="btn sm mt" data-add-build-task="${p.id}">+ Add task</button>
+
+        ${photos.length ? `<div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">JOB-SITE PHOTOS</div>
+          <div class="photo-grid">${photos.map((ph) => `<div class="photo"><img src="${ph.dataUrl}" alt="${esc(ph.caption || "")}"/><button class="del" data-del-photo="${ph.id}">✕</button></div>`).join("")}</div>` : ""}
+        <div class="flex mt" style="gap:8px"><label class="btn sm ghost" style="cursor:pointer">📷 Photo<input type="file" accept="image/*" capture="environment" multiple class="hide" data-photo-input="${p.id}"></label>
+          <button class="btn sm ghost" data-edit-prop="${p.id}">✎ Edit deal</button></div>
       </div>
-      <div>
-        <div class="flex between">
-          <div class="panel-title" style="font-size:10px"><span class="n">▸</span> Job-site photos</div>
-          <label class="btn sm" style="cursor:pointer">📷 Add<input type="file" accept="image/*" capture="environment" multiple class="hide" data-photo-input="${p.id}"></label>
-        </div>
-        ${photos.length ? `<div class="photo-grid">${photos.map((ph) => `
-          <div class="photo"><img src="${ph.dataUrl}" alt="${esc(ph.caption || "")}"/>
-          <button class="del" data-del-photo="${ph.id}">✕</button>
-          <div class="cap">${esc(ph.caption || fmtDate(ph.date))}</div></div>`).join("")}</div>`
-          : `<div class="empty" style="padding:14px">No photos yet</div>`}
-      </div>
-    </div>
-    <div class="mt"><button class="btn sm ghost" data-edit-prop="${p.id}">✎ Edit build details</button></div>
+    </details>
+  </div>`;
+}
+
+function pipelineRow(p) {
+  const stages = p.stages && p.stages.length ? p.stages : DEFAULT_STAGES;
+  const idx = p.stageIndex ?? 0;
+  const dm = p.targetDate ? dueMeta(p.targetDate) : null;
+  const m = dealMetrics(p);
+  return `<div class="row" data-edit-prop="${p.id}" style="cursor:pointer">
+    <div class="body"><div class="t">${esc(p.name)}</div>
+      <div class="m"><span class="tag">${esc(stages[idx] || "Pipeline")}</span>${p.nextStep ? `<span>${esc(p.nextStep)}</span>` : ""}${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}${m.hasReturns ? `<span class="mono" style="color:var(--ok,#28b478)">${money0(m.profit)}</span>` : ""}</div></div>
   </div>`;
 }
 
@@ -1420,28 +1474,38 @@ function editTaskPrefill(prefill) {
 
 function newBuild() {
   formModal({
-    title: "New Active Build",
-    sub: "Creates a property tracked in Active Builds.",
+    title: "New Project",
+    sub: "Adds a deal to Active Projects (or Pipeline). You can fill returns in later.",
     fields: [
       { key: "name", label: "Name" },
       { key: "address", label: "Address" },
-      { key: "permitStart", label: "Permit clock start", type: "date" },
-      { key: "permitDays", label: "Permit length (days)", type: "number", default: 180 },
+      { key: "kind", label: "Type", type: "select", options: [["active-build", "Active project"], ["pipeline", "Pipeline (coming up)"]] },
+      { key: "nextStep", label: "Next step" },
+      { key: "targetDate", label: "Target / key date", type: "date" },
+      { key: "arv", label: "Finished value / ARV ($)" },
+      { key: "purchasePrice", label: "Purchase price ($)" },
+      { key: "rehabBudget", label: "Rehab / construction budget ($)" },
     ],
-    values: { permitDays: 180 },
-    onSubmit: (v) => { DB.upsert("properties", { id: undefined, name: v.name, address: v.address, kind: "active-build", stage: DEFAULT_STAGES[0], stageIndex: 0, stages: DEFAULT_STAGES, permitStart: v.permitStart, permitDays: v.permitDays, order: 100 }); toast("Build created"); },
+    values: { kind: "active-build" },
+    onSubmit: (v) => { DB.upsert("properties", { id: undefined, name: v.name, address: v.address, kind: v.kind || "active-build", nextStep: v.nextStep || "", targetDate: v.targetDate || "", arv: v.arv || "", purchasePrice: v.purchasePrice || "", rehabBudget: v.rehabBudget || "", stage: DEFAULT_STAGES[0], stageIndex: 0, stages: DEFAULT_STAGES, order: 100 }); toast(`${v.kind === "pipeline" ? "Pipeline deal" : "Project"} created`); },
   });
 }
 
 function editProperty(id) {
   const p = state.properties.find((x) => x.id === id);
   formModal({
-    title: "Property Details",
-    sub: p.kind === "active-build" ? "Active build" : "Portfolio property",
+    title: "Deal / Property Details",
+    sub: p.kind === "active-build" ? "Active project" : p.kind === "pipeline" ? "Pipeline deal" : "Portfolio property",
     fields: [
       { key: "name", label: "Name" },
       { key: "address", label: "Address" },
-      { key: "kind", label: "Type", type: "select", options: [["active-build", "Active build"], ["rental", "Rental"], ["other", "Other"]] },
+      { key: "kind", label: "Type", type: "select", options: [["active-build", "Active project"], ["pipeline", "Pipeline (coming up)"], ["rental", "Rental"], ["other", "Other"]] },
+      { key: "nextStep", label: "Next step (shown on the card)" },
+      { key: "targetDate", label: "Target / key date", type: "date" },
+      { key: "purchasePrice", label: "Purchase price ($)" },
+      { key: "rehabBudget", label: "Rehab / construction budget ($)" },
+      { key: "otherCosts", label: "Other costs — holding, closing, financing ($)" },
+      { key: "arv", label: "Finished value / ARV / sellout ($)" },
       { key: "permitStart", label: "Permit clock start", type: "date" },
       { key: "permitDays", label: "Permit length (days)", type: "number" },
       { key: "tenant", label: "Tenant" },
