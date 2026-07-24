@@ -1356,7 +1356,8 @@ function propPhase(p) {
   return "completed";
 }
 function phaseMeta(key) { return PHASES.find((x) => x.key === key) || { label: key, color: "var(--line)" }; }
-let projFilter = null; // which phase segment is selected on Active Projects
+let projFilter = null;   // which phase segment is selected on Active Projects
+let selectedProp = null; // which property is opened for detail
 
 function portfolioDonut(segs) {
   const total = segs.reduce((s, x) => s + x.count, 0);
@@ -1376,36 +1377,33 @@ function phaseLegend(segs) {
 }
 function propSelectRow(p) {
   const ph = phaseMeta(propPhase(p)); const m = dealMetrics(p);
-  return `<div class="row" data-edit-prop="${p.id}" style="cursor:pointer">
+  return `<div class="row" data-open-prop="${p.id}" style="cursor:pointer">
     <div class="body"><div class="t">${esc(p.name)}</div>
       <div class="m"><span class="tag" style="border-color:${ph.color}">${esc(ph.label)}</span>${p.address ? `<span>▦ ${esc(p.address)}</span>` : ""}${m.hasReturns ? `<span class="mono" style="color:var(--ok,#28b478)">${money0(m.profit)}</span>` : ""}</div></div>
+    <div class="actions"><span class="mono muted" style="font-size:14px">›</span></div>
   </div>`;
 }
 
 VIEWS.builds = {
   render() {
-    const active = activeBuilds();
-    const pipeline = pipelineDeals().slice().sort((a, b) => (a.targetDate || "9999").localeCompare(b.targetDate || "9999"));
-    const totalProfit = active.reduce((s, p) => { const m = dealMetrics(p); return s + (m.hasReturns ? m.profit : 0); }, 0);
-    const bAll = active.map(budgetMetrics);
-    const totBudget = bAll.reduce((s, x) => s + x.budget, 0);
-    const totSpent = bAll.reduce((s, x) => s + x.spent, 0);
-    const totEac = bAll.reduce((s, x) => s + x.eac, 0);
-    const totVar = bAll.reduce((s, x) => s + x.variance, 0);
     const segs = PHASES.map((ph) => ({ ...ph, count: state.properties.filter((p) => propPhase(p) === ph.key).length }));
-    const filtered = projFilter ? state.properties.filter((p) => propPhase(p) === projFilter) : null;
+    const sel = selectedProp ? state.properties.find((p) => p.id === selectedProp) : null;
+    const filtered = projFilter ? state.properties.filter((p) => propPhase(p) === projFilter).sort((a, b) => (a.name || "").localeCompare(b.name || "")) : null;
+    const activeBudget = () => {
+      const bAll = state.properties.filter((p) => propPhase(p) === "active").map(budgetMetrics);
+      const tB = bAll.reduce((s, x) => s + x.budget, 0), tS = bAll.reduce((s, x) => s + x.spent, 0), tE = bAll.reduce((s, x) => s + x.eac, 0), tV = bAll.reduce((s, x) => s + x.variance, 0);
+      if (!tB) return "";
+      return `<div class="grid cols-4 mb">
+        <div class="stat"><div class="k">Total Budget</div><div class="v" style="font-size:19px">${money0(tB)}</div><div class="sub">projected</div></div>
+        <div class="stat"><div class="k">Spent</div><div class="v" style="font-size:19px">${money0(tS)}</div><div class="sub">${Math.round(tS / tB * 100)}% of budget</div></div>
+        <div class="stat"><div class="k">Projected Final</div><div class="v" style="font-size:19px">${money0(tE)}</div><div class="sub">at completion</div></div>
+        <div class="stat"><div class="k">Over / Under</div><div class="v ${tV < 0 ? "red" : "green"}" style="font-size:19px">${tV < 0 ? "−" + money0(-tV) : money0(tV)}</div><div class="sub">vs budget</div></div>
+      </div>`;
+    };
     return `
     <div class="view">
       <div class="view-head"><div><div class="eyebrow">Portfolio</div><h1>Active Projects</h1></div>
         <button class="btn primary" data-new-build>+ New project</button></div>
-
-      <div class="mono muted" style="font-size:11.5px;margin-bottom:8px">${active.length} active · ${pipeline.length} pipeline${totalProfit ? ` · projected profit <span style="color:var(--ok,#28b478);font-weight:700">${money0(totalProfit)}</span>` : ""}</div>
-      <div class="grid cols-4 mb">
-        <div class="stat"><div class="k">Total Budget</div><div class="v" style="font-size:20px">${totBudget ? money0(totBudget) : "—"}</div><div class="sub">projected cost</div></div>
-        <div class="stat"><div class="k">Spent to Date</div><div class="v" style="font-size:20px">${totSpent ? money0(totSpent) : "—"}</div><div class="sub">${totBudget ? Math.round(totSpent / totBudget * 100) + "% of budget" : "actual"}</div></div>
-        <div class="stat"><div class="k">Projected Final</div><div class="v" style="font-size:20px">${totEac ? money0(totEac) : "—"}</div><div class="sub">est. at completion</div></div>
-        <div class="stat"><div class="k">Over / Under</div><div class="v ${totVar < 0 ? "red" : totBudget ? "green" : ""}" style="font-size:20px">${totBudget ? (totVar < 0 ? "−" + money0(-totVar) : money0(totVar)) : "—"}</div><div class="sub">${totBudget ? (totVar < 0 ? "over budget" : "under budget") : "vs budget"}</div></div>
-      </div>
 
       <div class="panel mb">
         <div class="panel-title"><span class="n">◑</span> Portfolio at a glance</div>
@@ -1413,22 +1411,25 @@ VIEWS.builds = {
           ${portfolioDonut(segs)}
           <div style="flex:1;min-width:200px">${phaseLegend(segs)}</div>
         </div>
-        <div class="muted" style="font-size:11px;margin-top:4px">Tap a category to see and open those properties.</div>
+        <div class="muted" style="font-size:11px;margin-top:4px">Tap a category above to open those projects.</div>
       </div>
 
-      ${projFilter ? `
-      <div class="panel mb">
-        <div class="flex between"><div class="panel-title" style="margin:0">${esc(phaseMeta(projFilter).label)} · ${filtered.length}</div>
-          <button class="btn sm ghost" data-proj-filter="clear">← all projects</button></div>
-        ${filtered.length ? filtered.map(propSelectRow).join("") : `<div class="empty">Nothing in this category yet.</div>`}
-      </div>` : `
-      ${active.length ? active.map(projectCard).join("") : `<div class="empty">No active projects yet. Open a property and set its Type to “Active project” to track it here.</div>`}
-
-      <div class="panel mt">
-        <div class="panel-title"><span class="n">⏭</span> Coming Up — pipeline</div>
-        <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Deals under contract or queued next, sorted by date — so you can plan ahead.</div>
-        ${pipeline.length ? pipeline.map(pipelineRow).join("") : `<div class="empty">Nothing in the pipeline. Set a property's Type to “Pipeline” to plan it here.</div>`}
-      </div>`}
+      ${sel ? `
+        <div class="flex between mb" style="align-items:center">
+          <button class="btn sm ghost" data-open-prop="back">← ${esc(phaseMeta(propPhase(sel)).label)}</button>
+          <button class="btn sm ghost" data-edit-prop="${sel.id}">✎ Edit deal</button>
+        </div>
+        ${projectCard(sel)}`
+      : projFilter ? `
+        <div class="flex between mb" style="align-items:center">
+          <div class="panel-title" style="margin:0">${esc(phaseMeta(projFilter).label)} · ${filtered.length}</div>
+          <button class="btn sm ghost" data-proj-filter="clear">← all</button>
+        </div>
+        ${projFilter === "active" ? activeBudget() : ""}
+        <div class="panel">
+          ${filtered.length ? filtered.map(propSelectRow).join("") : `<div class="empty">Nothing in this category yet.</div>`}
+        </div>`
+      : `<div class="muted" style="text-align:center;padding:6px;font-size:12px">Pick a category to dive in.</div>`}
     </div>`;
   },
   mount(root) {
@@ -1439,7 +1440,8 @@ VIEWS.builds = {
     root.querySelectorAll("[data-del-photo]").forEach((el) => el.addEventListener("click", () => { if (confirm("Delete photo?")) DB.remove("photos", el.dataset.delPhoto); }));
     root.querySelectorAll("[data-new-build]").forEach((el) => el.addEventListener("click", () => newBuild()));
     root.querySelectorAll("[data-add-build-task]").forEach((el) => el.addEventListener("click", () => quickTaskFor(el.dataset.addBuildTask)));
-    root.querySelectorAll("[data-proj-filter]").forEach((el) => el.addEventListener("click", () => { const v = el.dataset.projFilter; projFilter = v === "clear" ? null : (projFilter === v ? null : v); render(); }));
+    root.querySelectorAll("[data-proj-filter]").forEach((el) => el.addEventListener("click", () => { const v = el.dataset.projFilter; projFilter = v === "clear" ? null : (projFilter === v ? null : v); selectedProp = null; render(); }));
+    root.querySelectorAll("[data-open-prop]").forEach((el) => el.addEventListener("click", () => { const v = el.dataset.openProp; selectedProp = v === "back" ? null : v; render(); }));
   },
 };
 

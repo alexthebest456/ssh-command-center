@@ -245,32 +245,43 @@ const STATUS_UPDATES = [
   { match: ["prop-washington", "washington"], kind: "active-build", phase: "active", stageIndex: 4, stage: "Framing",
     nextStep: "Completing framing" },
   { match: ["prop-muller", "muller", "mueller"], kind: "active-build", phase: "active", stageIndex: 2, stage: "Permitting",
-    nextStep: "Start construction Aug 24 — complete & final by Dec 20", targetDate: "2026-12-20" },
+    nextStep: "Ready to build — waiting on tenant to vacate garage; construction starts Aug 24, done by Dec 20", targetDate: "2026-12-20" },
   { match: ["prop-spry", "spry"], kind: "active-build", phase: "active", stageIndex: 2, stage: "Permitting",
     nextStep: "Ready to build ~Aug 1 — 3.5-month build", targetDate: "2026-11-15" },
   { match: ["prop-painter-11912", "painter"], kind: "active-build", phase: "active", stageIndex: 1, stage: "Design / Plans",
     nextStep: "Run numbers & decide scope by Aug 1 — 6-month planning", targetDate: "2027-02-01" },
+  { match: ["prop-140-12th", "140 12th", "12th st"], kind: "active-build", phase: "active", stageIndex: 2, stage: "Permitting",
+    nextStep: "Tenants out Nov 30 · remodel units Dec–Jan · ADU permits ~6 mo out · then ~1 mo to re-tenant", targetDate: "2027-01-31" },
   { match: ["prop-tweedy", "tweedy"], phase: "land",
     nextStep: "Analyze land & decide what to build — screen architects" },
   { match: ["prop-fidel", "fidel"], phase: "land",
     nextStep: "Analyze land & decide what to build — screen architects" },
   { match: ["prop-woodruff-nance", "woodruff", "nance"], phase: "land",
     nextStep: "Analyze land & decide what to build — screen architects" },
+  // The manually-added "Arrington" deal (no address) — not yet closed → Pipeline,
+  // not an active build. Exact-name match so it never touches 10516/10522 Arrington.
+  { nameEquals: "arrington", kind: "pipeline", phase: "pipeline", stageIndex: 0, stage: "Acquisition",
+    nextStep: "Closing ~Jul 31 — then offer cash-for-keys", targetDate: "2026-07-31" },
 ];
 
 export async function applyPortfolioStatuses() {
-  if (localStorage.getItem("sshcc:portfolio-status-v1")) return;
+  if (localStorage.getItem("sshcc:portfolio-status-v2")) return;
   const props = DB.getAll("properties");
   if (!props.length) return; // data not loaded yet — try again next boot (guard not set)
   let applied = 0;
   for (const u of STATUS_UPDATES) {
-    const byId = props.find((x) => u.match.includes(x.id));
-    const byText = byId || props.find((x) => u.match.some((m) => (x.name || "").toLowerCase().includes(m) || (x.address || "").toLowerCase().includes(m)));
-    if (!byText) continue;
-    const { match, ...fields } = u;
-    await DB.upsert("properties", { ...byText, ...fields });
+    let target = null;
+    if (u.nameEquals) {
+      target = props.find((x) => (x.name || "").trim().toLowerCase() === u.nameEquals);
+    } else {
+      target = props.find((x) => u.match.includes(x.id)) ||
+               props.find((x) => u.match.some((m) => (x.name || "").toLowerCase().includes(m) || (x.address || "").toLowerCase().includes(m)));
+    }
+    if (!target) continue;
+    const { match, nameEquals, ...fields } = u;
+    await DB.upsert("properties", { ...target, ...fields });
     applied++;
   }
-  localStorage.setItem("sshcc:portfolio-status-v1", "1");
+  localStorage.setItem("sshcc:portfolio-status-v2", "1");
   console.log(`Portfolio status correction applied to ${applied} propert${applied === 1 ? "y" : "ies"}.`);
 }
