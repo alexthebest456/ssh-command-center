@@ -1554,14 +1554,22 @@ function scheduleMetrics(p) {
   return { stages, idx, n, start, done, phaseDates, actualFrac, status };
 }
 function scheduleStrip(sc) {
-  const { stages, idx, phaseDates, start, done } = sc;
-  const seg = stages.map((s, i) => `<div style="flex:1;min-width:0" title="${esc(s)}${phaseDates[i] ? " · " + fmtDate(phaseDates[i]) : ""}"><div style="height:8px;border-radius:3px;background:${i < idx ? "var(--ok,#28b478)" : i === idx ? "#f5a623" : "var(--line)"}"></div></div>`).join("");
-  return `<div style="display:flex;gap:3px;margin-top:6px">${seg}</div>
-    <div class="flex between mono muted" style="font-size:9.5px;margin-top:4px">
-      <span>${start ? fmtDate(toISO(start)) : "start —"}</span>
-      <span style="color:#f5a623">${esc(stages[idx] || "")}${phaseDates[idx] ? " · " + fmtDate(phaseDates[idx]) : ""}</span>
-      <span>done ${done ? fmtDate(toISO(done)) : "—"}</span>
-    </div>`;
+  const { stages, idx, phaseDates } = sc;
+  const md = (iso) => { const d = parseISO(iso); return d ? `${d.getMonth() + 1}/${d.getDate()}` : ""; };
+  return `<div style="display:flex;gap:3px;margin-top:6px">${stages.map((s, i) => `<div style="flex:1;min-width:0;text-align:center" title="${esc(s)}">
+      <div style="height:8px;border-radius:3px;background:${i < idx ? "var(--ok,#28b478)" : i === idx ? "#f5a623" : "var(--line)"}"></div>
+      <div class="mono ${i === idx ? "" : "muted"}" style="font-size:8px;margin-top:3px;${i === idx ? "color:#f5a623;font-weight:700" : ""}">${phaseDates[i] ? md(phaseDates[i]) : ""}</div>
+    </div>`).join("")}</div>`;
+}
+function phaseScheduleList(sc, p) {
+  const { stages, idx, phaseDates } = sc;
+  if (!phaseDates.length) return `<div class="mono muted" style="font-size:10px;margin-top:8px">Set a start + finish date (Edit deal) to date each phase.</div>`;
+  return `<div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:12px">PHASE SCHEDULE</div>
+    <div style="margin-top:4px">${stages.map((s, i) => `<div class="flex between" data-stage="${i}" data-prop-id="${p.id}" style="font-size:11.5px;padding:4px 2px;border-bottom:1px dashed var(--line);cursor:pointer">
+      <span>${i < idx ? "✓ " : i === idx ? "▶ " : "· "}${esc(s)}</span>
+      <span class="mono ${i === idx ? "" : "muted"}" style="${i === idx ? "color:#f5a623;font-weight:700" : ""}">${phaseDates[i] ? fmtDate(phaseDates[i]) : "—"}</span>
+    </div>`).join("")}</div>
+    <div class="mono muted" style="font-size:9px;margin-top:3px">Tap a phase to mark it the current step.</div>`;
 }
 function statusBar(sc) {
   if (!sc.status) return `<div class="mono muted" style="font-size:10px;margin-top:6px">Add a start date + finish date (Edit deal) to track schedule health.</div>`;
@@ -1610,6 +1618,8 @@ function projectCard(p) {
     <div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:10px">STATUS</div>
     ${statusBar(sc)}
 
+    ${phaseScheduleList(sc, p)}
+
     <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
     ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
     ${costBreakdown(b)}
@@ -1622,7 +1632,6 @@ function projectCard(p) {
 
         <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">TIMELINE — tap a step to set where you are</div>
         <div class="stages">${stages.map((s, i) => `<span class="stage-chip ${i < idx ? "done" : i === idx ? "current" : ""}" data-stage="${i}" data-prop-id="${p.id}">${esc(s)}</span>`).join("")}</div>
-        ${sc.phaseDates.length ? `<div style="margin-top:8px">${stages.map((s, i) => `<div class="flex between" style="font-size:11.5px;padding:3px 0;border-bottom:1px dashed var(--line)"><span>${i < idx ? "✓ " : i === idx ? "▶ " : "· "}${esc(s)}</span><span class="mono ${i === idx ? "" : "muted"}">${sc.phaseDates[i] ? fmtDate(sc.phaseDates[i]) : "—"}</span></div>`).join("")}</div>` : `<div class="mono muted" style="font-size:10px;margin-top:6px">Set a start + finish date (Edit deal) to date each phase.</div>`}
 
         <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">NEXT STEPS / TASKS</div>
         ${tasks.length ? tasks.slice(0, 6).map(taskRow).join("") : `<div class="empty" style="padding:10px">No open tasks</div>`}
