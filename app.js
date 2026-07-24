@@ -1342,6 +1342,46 @@ function permitStatus(p) {
 
 function pipelineDeals() { return state.properties.filter((p) => p.kind === "pipeline"); }
 
+// ── Portfolio phases — the visual snapshot on Active Projects ─────────────────
+const PHASES = [
+  { key: "active",    label: "Active build",           color: "#3b82f6" },
+  { key: "pipeline",  label: "Pipeline / acquiring",   color: "#a855f7" },
+  { key: "land",      label: "Land — ready to build",  color: "#f5a623" },
+  { key: "completed", label: "Completed / stabilized", color: "#28b478" },
+];
+function propPhase(p) {
+  if (p.phase && PHASES.some((x) => x.key === p.phase)) return p.phase;
+  if (p.kind === "pipeline") return "pipeline";
+  if (p.kind === "active-build") return "active";
+  return "completed";
+}
+function phaseMeta(key) { return PHASES.find((x) => x.key === key) || { label: key, color: "var(--line)" }; }
+let projFilter = null; // which phase segment is selected on Active Projects
+
+function portfolioDonut(segs) {
+  const total = segs.reduce((s, x) => s + x.count, 0);
+  const r = 54, C = 2 * Math.PI * r; let off = 0;
+  const arcs = total
+    ? segs.filter((s) => s.count > 0).map((s) => { const dash = (s.count / total) * C; const el = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${s.color}" stroke-width="20" stroke-dasharray="${dash} ${C - dash}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)"/>`; off += dash; return el; }).join("")
+    : `<circle cx="70" cy="70" r="${r}" fill="none" stroke="var(--line)" stroke-width="20"/>`;
+  return `<svg width="140" height="140" viewBox="0 0 140 140" style="flex:0 0 auto">${arcs}
+    <text x="70" y="66" text-anchor="middle" font-size="26" font-weight="800" fill="currentColor">${total}</text>
+    <text x="70" y="84" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.55">PROPERTIES</text></svg>`;
+}
+function phaseLegend(segs) {
+  return segs.map((s) => `<button data-proj-filter="${s.key}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:${projFilter === s.key ? "var(--panel-2,rgba(127,127,127,.10))" : "transparent"};border:1px solid ${projFilter === s.key ? s.color : "var(--line)"};border-radius:8px;padding:7px 10px;margin-bottom:5px;cursor:pointer;color:inherit">
+    <span style="width:12px;height:12px;border-radius:3px;background:${s.color};flex:0 0 auto"></span>
+    <span style="flex:1;font-size:12.5px">${esc(s.label)}</span>
+    <span class="mono" style="font-weight:800;font-size:13px">${s.count}</span></button>`).join("");
+}
+function propSelectRow(p) {
+  const ph = phaseMeta(propPhase(p)); const m = dealMetrics(p);
+  return `<div class="row" data-edit-prop="${p.id}" style="cursor:pointer">
+    <div class="body"><div class="t">${esc(p.name)}</div>
+      <div class="m"><span class="tag" style="border-color:${ph.color}">${esc(ph.label)}</span>${p.address ? `<span>▦ ${esc(p.address)}</span>` : ""}${m.hasReturns ? `<span class="mono" style="color:var(--ok,#28b478)">${money0(m.profit)}</span>` : ""}</div></div>
+  </div>`;
+}
+
 VIEWS.builds = {
   render() {
     const active = activeBuilds();
@@ -1352,6 +1392,8 @@ VIEWS.builds = {
     const totSpent = bAll.reduce((s, x) => s + x.spent, 0);
     const totEac = bAll.reduce((s, x) => s + x.eac, 0);
     const totVar = bAll.reduce((s, x) => s + x.variance, 0);
+    const segs = PHASES.map((ph) => ({ ...ph, count: state.properties.filter((p) => propPhase(p) === ph.key).length }));
+    const filtered = projFilter ? state.properties.filter((p) => propPhase(p) === projFilter) : null;
     return `
     <div class="view">
       <div class="view-head"><div><div class="eyebrow">Portfolio</div><h1>Active Projects</h1></div>
@@ -1365,13 +1407,28 @@ VIEWS.builds = {
         <div class="stat"><div class="k">Over / Under</div><div class="v ${totVar < 0 ? "red" : totBudget ? "green" : ""}" style="font-size:20px">${totBudget ? (totVar < 0 ? "−" + money0(-totVar) : money0(totVar)) : "—"}</div><div class="sub">${totBudget ? (totVar < 0 ? "over budget" : "under budget") : "vs budget"}</div></div>
       </div>
 
+      <div class="panel mb">
+        <div class="panel-title"><span class="n">◑</span> Portfolio at a glance</div>
+        <div class="flex" style="gap:20px;align-items:center;flex-wrap:wrap">
+          ${portfolioDonut(segs)}
+          <div style="flex:1;min-width:200px">${phaseLegend(segs)}</div>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:4px">Tap a category to see and open those properties.</div>
+      </div>
+
+      ${projFilter ? `
+      <div class="panel mb">
+        <div class="flex between"><div class="panel-title" style="margin:0">${esc(phaseMeta(projFilter).label)} · ${filtered.length}</div>
+          <button class="btn sm ghost" data-proj-filter="clear">← all projects</button></div>
+        ${filtered.length ? filtered.map(propSelectRow).join("") : `<div class="empty">Nothing in this category yet.</div>`}
+      </div>` : `
       ${active.length ? active.map(projectCard).join("") : `<div class="empty">No active projects yet. Open a property and set its Type to “Active project” to track it here.</div>`}
 
       <div class="panel mt">
         <div class="panel-title"><span class="n">⏭</span> Coming Up — pipeline</div>
         <div class="muted" style="font-size:11.5px;margin:-2px 0 8px">Deals under contract or queued next, sorted by date — so you can plan ahead.</div>
         ${pipeline.length ? pipeline.map(pipelineRow).join("") : `<div class="empty">Nothing in the pipeline. Set a property's Type to “Pipeline” to plan it here.</div>`}
-      </div>
+      </div>`}
     </div>`;
   },
   mount(root) {
@@ -1382,6 +1439,7 @@ VIEWS.builds = {
     root.querySelectorAll("[data-del-photo]").forEach((el) => el.addEventListener("click", () => { if (confirm("Delete photo?")) DB.remove("photos", el.dataset.delPhoto); }));
     root.querySelectorAll("[data-new-build]").forEach((el) => el.addEventListener("click", () => newBuild()));
     root.querySelectorAll("[data-add-build-task]").forEach((el) => el.addEventListener("click", () => quickTaskFor(el.dataset.addBuildTask)));
+    root.querySelectorAll("[data-proj-filter]").forEach((el) => el.addEventListener("click", () => { const v = el.dataset.projFilter; projFilter = v === "clear" ? null : (projFilter === v ? null : v); render(); }));
   },
 };
 
@@ -1564,6 +1622,7 @@ function editProperty(id) {
       { key: "name", label: "Name" },
       { key: "address", label: "Address" },
       { key: "kind", label: "Type", type: "select", options: [["active-build", "Active project"], ["pipeline", "Pipeline (coming up)"], ["rental", "Rental"], ["other", "Other"]] },
+      { key: "phase", label: "Phase (portfolio chart)", type: "select", options: [["", "Auto (from type)"], ["active", "Active build"], ["pipeline", "Pipeline / acquiring"], ["land", "Land — ready to build"], ["completed", "Completed / stabilized"]] },
       { key: "nextStep", label: "Next step (shown on the card)" },
       { key: "targetDate", label: "Target / key date", type: "date" },
       { key: "purchasePrice", label: "Purchase price ($)" },
