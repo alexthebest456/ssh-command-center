@@ -1505,7 +1505,57 @@ function returnsBlock(m) {
 
 // One clean, investor-readable project card: returns up top, a timeline with the
 // current step, and the next steps — with the busy detail tucked into an expander.
+// Schedule — per-phase dates (interpolated from start→finish unless set) plus a
+// health read (on track / behind / overdue) comparing today's progress to plan.
+function scheduleMetrics(p) {
+  const stages = p.stages && p.stages.length ? p.stages : DEFAULT_STAGES;
+  const idx = p.stageIndex ?? 0;
+  const n = stages.length;
+  const start = parseISO(p.startDate);
+  const done = parseISO(p.targetDate);
+  let phaseDates = [];
+  if (p.stageDates && p.stageDates.length === n) phaseDates = p.stageDates.slice();
+  else if (start && done && n > 1) { const span = done - start; phaseDates = stages.map((s, i) => toISO(new Date(start.getTime() + (i / (n - 1)) * span))); }
+  const actualFrac = n > 1 ? idx / (n - 1) : 1;
+  let status = null;
+  if (start && done && done > start) {
+    const plannedFrac = Math.min(1, Math.max(0, (todayDate() - start) / (done - start)));
+    const complete = idx >= n - 1;
+    const overdue = todayDate() > done && !complete;
+    let behind = 0;
+    if (phaseDates.length) { const dueLeave = parseISO(phaseDates[Math.min(idx + 1, n - 1)]); if (dueLeave) behind = Math.round((todayDate() - dueLeave) / DAY); }
+    let label, color;
+    if (complete) { label = "Complete"; color = "var(--ok,#28b478)"; }
+    else if (overdue) { label = `Overdue ${Math.round((todayDate() - done) / DAY)}d`; color = "#dc5050"; }
+    else if (behind > 3) { label = `${behind}d behind`; color = "#e0913a"; }
+    else { label = "On track"; color = "var(--ok,#28b478)"; }
+    status = { label, color, plannedFrac, actualFrac };
+  }
+  return { stages, idx, n, start, done, phaseDates, actualFrac, status };
+}
+function scheduleStrip(sc) {
+  const { stages, idx, phaseDates, start, done } = sc;
+  const seg = stages.map((s, i) => `<div style="flex:1;min-width:0" title="${esc(s)}${phaseDates[i] ? " · " + fmtDate(phaseDates[i]) : ""}"><div style="height:8px;border-radius:3px;background:${i < idx ? "var(--ok,#28b478)" : i === idx ? "#f5a623" : "var(--line)"}"></div></div>`).join("");
+  return `<div style="display:flex;gap:3px;margin-top:6px">${seg}</div>
+    <div class="flex between mono muted" style="font-size:9.5px;margin-top:4px">
+      <span>${start ? fmtDate(toISO(start)) : "start —"}</span>
+      <span style="color:#f5a623">${esc(stages[idx] || "")}${phaseDates[idx] ? " · " + fmtDate(phaseDates[idx]) : ""}</span>
+      <span>done ${done ? fmtDate(toISO(done)) : "—"}</span>
+    </div>`;
+}
+function statusBar(sc) {
+  if (!sc.status) return `<div class="mono muted" style="font-size:10px;margin-top:6px">Add a start date + finish date (Edit deal) to track schedule health.</div>`;
+  const s = sc.status, fill = Math.round(s.actualFrac * 100), plan = Math.round(s.plannedFrac * 100);
+  return `<div style="position:relative;height:22px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:6px">
+      <div style="position:absolute;top:0;bottom:0;left:0;width:${fill}%;background:${s.color};opacity:.30"></div>
+      <div style="position:absolute;top:-1px;bottom:-1px;left:${plan}%;width:2px;background:var(--ink,#888)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${s.color}">${esc(s.label)}</div>
+    </div>
+    <div class="mono muted" style="font-size:9px;margin-top:3px;text-align:right">fill = your progress · line = where you should be today</div>`;
+}
+
 function projectCard(p) {
+  const sc = scheduleMetrics(p);
   const c = permitStatus(p);
   const stages = p.stages && p.stages.length ? p.stages : DEFAULT_STAGES;
   const idx = p.stageIndex ?? 0;
@@ -1532,11 +1582,15 @@ function projectCard(p) {
 
     <div class="flex between" style="margin-top:12px;align-items:baseline;gap:8px">
       <span class="tag amber">Now: ${esc(stages[idx] || "—")}</span>
-      <div class="mono muted" style="font-size:10.5px">Step ${idx + 1} of ${stages.length}${c.label !== "no clock" ? ` · permit ${c.label}` : ""}${tgt ? ` · target ${tgt.text}` : ""}</div>
+      <div class="mono muted" style="font-size:10.5px">Step ${idx + 1} of ${stages.length}${tgt ? ` · done ${tgt.text}` : ""}</div>
     </div>
-    <div class="bar" style="margin-top:6px"><span class="ok" style="width:${pct}%"></span></div>
 
-    <div style="margin-top:10px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
+    <div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:10px">SCHEDULE</div>
+    ${scheduleStrip(sc)}
+    <div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:10px">STATUS</div>
+    ${statusBar(sc)}
+
+    <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
     ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
 
     <details style="margin-top:10px">
@@ -1547,6 +1601,7 @@ function projectCard(p) {
 
         <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">TIMELINE — tap a step to set where you are</div>
         <div class="stages">${stages.map((s, i) => `<span class="stage-chip ${i < idx ? "done" : i === idx ? "current" : ""}" data-stage="${i}" data-prop-id="${p.id}">${esc(s)}</span>`).join("")}</div>
+        ${sc.phaseDates.length ? `<div style="margin-top:8px">${stages.map((s, i) => `<div class="flex between" style="font-size:11.5px;padding:3px 0;border-bottom:1px dashed var(--line)"><span>${i < idx ? "✓ " : i === idx ? "▶ " : "· "}${esc(s)}</span><span class="mono ${i === idx ? "" : "muted"}">${sc.phaseDates[i] ? fmtDate(sc.phaseDates[i]) : "—"}</span></div>`).join("")}</div>` : `<div class="mono muted" style="font-size:10px;margin-top:6px">Set a start + finish date (Edit deal) to date each phase.</div>`}
 
         <div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:12px 0 4px">NEXT STEPS / TASKS</div>
         ${tasks.length ? tasks.slice(0, 6).map(taskRow).join("") : `<div class="empty" style="padding:10px">No open tasks</div>`}
@@ -1626,7 +1681,8 @@ function editProperty(id) {
       { key: "kind", label: "Type", type: "select", options: [["active-build", "Active project"], ["pipeline", "Pipeline (coming up)"], ["rental", "Rental"], ["other", "Other"]] },
       { key: "phase", label: "Phase (portfolio chart)", type: "select", options: [["", "Auto (from type)"], ["active", "Active build"], ["pipeline", "Pipeline / acquiring"], ["land", "Land — ready to build"], ["completed", "Completed / stabilized"]] },
       { key: "nextStep", label: "Next step (shown on the card)" },
-      { key: "targetDate", label: "Target / key date", type: "date" },
+      { key: "startDate", label: "Start date (for the schedule bar)", type: "date" },
+      { key: "targetDate", label: "Finish / target date", type: "date" },
       { key: "purchasePrice", label: "Purchase price ($)" },
       { key: "rehabBudget", label: "Projected cost / construction budget ($)" },
       { key: "spentToDate", label: "Actually spent to date ($)" },
