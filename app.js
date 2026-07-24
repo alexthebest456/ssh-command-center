@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -2722,6 +2722,7 @@ async function boot() {
   try { await seedIfEmpty(); } catch (e) { console.warn("seed skipped", e); }
   try { await seedPersonalOS(); } catch (e) { console.warn("personal OS seed skipped", e); }
   try { await upgradePortfolio(); } catch (e) { console.warn("portfolio upgrade skipped", e); }
+  try { await applyPortfolioStatuses(); } catch (e) { console.warn("portfolio status correction skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }

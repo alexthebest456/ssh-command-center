@@ -235,3 +235,42 @@ export async function upgradePortfolio() {
   }
   localStorage.setItem("sshcc:portfolio-v2", "1");
 }
+
+// ── One-time project-status correction (as of Jul 2026) ──────────────────────
+// Sets the real phase/stage on known projects so the dashboard reflects reality
+// instead of defaulting every property to "stabilized". Matches by id first,
+// then by name/address text, and only writes the listed fields — nothing else
+// is touched. Guarded so it runs once; bump the version to re-run with edits.
+const STATUS_UPDATES = [
+  { match: ["prop-washington", "washington"], kind: "active-build", phase: "active", stageIndex: 4, stage: "Framing",
+    nextStep: "Completing framing" },
+  { match: ["prop-muller", "muller", "mueller"], kind: "active-build", phase: "active", stageIndex: 2, stage: "Permitting",
+    nextStep: "Start construction Aug 24 — complete & final by Dec 20", targetDate: "2026-12-20" },
+  { match: ["prop-spry", "spry"], kind: "active-build", phase: "active", stageIndex: 2, stage: "Permitting",
+    nextStep: "Ready to build ~Aug 1 — 3.5-month build", targetDate: "2026-11-15" },
+  { match: ["prop-painter-11912", "painter"], kind: "active-build", phase: "active", stageIndex: 1, stage: "Design / Plans",
+    nextStep: "Run numbers & decide scope by Aug 1 — 6-month planning", targetDate: "2027-02-01" },
+  { match: ["prop-tweedy", "tweedy"], phase: "land",
+    nextStep: "Analyze land & decide what to build — screen architects" },
+  { match: ["prop-fidel", "fidel"], phase: "land",
+    nextStep: "Analyze land & decide what to build — screen architects" },
+  { match: ["prop-woodruff-nance", "woodruff", "nance"], phase: "land",
+    nextStep: "Analyze land & decide what to build — screen architects" },
+];
+
+export async function applyPortfolioStatuses() {
+  if (localStorage.getItem("sshcc:portfolio-status-v1")) return;
+  const props = DB.getAll("properties");
+  if (!props.length) return; // data not loaded yet — try again next boot (guard not set)
+  let applied = 0;
+  for (const u of STATUS_UPDATES) {
+    const byId = props.find((x) => u.match.includes(x.id));
+    const byText = byId || props.find((x) => u.match.some((m) => (x.name || "").toLowerCase().includes(m) || (x.address || "").toLowerCase().includes(m)));
+    if (!byText) continue;
+    const { match, ...fields } = u;
+    await DB.upsert("properties", { ...byText, ...fields });
+    applied++;
+  }
+  localStorage.setItem("sshcc:portfolio-status-v1", "1");
+  console.log(`Portfolio status correction applied to ${applied} propert${applied === 1 ? "y" : "ies"}.`);
+}
