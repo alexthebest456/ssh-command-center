@@ -1370,17 +1370,31 @@ function portfolioDonut(segs) {
     <text x="70" y="84" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.55">PROPERTIES</text></svg>`;
 }
 function phaseLegend(segs) {
-  return segs.map((s) => `<button data-proj-filter="${s.key}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:${projFilter === s.key ? "var(--panel-2,rgba(127,127,127,.10))" : "transparent"};border:1px solid ${projFilter === s.key ? s.color : "var(--line)"};border-radius:8px;padding:7px 10px;margin-bottom:5px;cursor:pointer;color:inherit">
+  const total = segs.reduce((s, x) => s + x.count, 0) || 1;
+  return segs.map((s) => `<button data-proj-filter="${s.key}" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:${projFilter === s.key ? "var(--panel-2,rgba(127,127,127,.10))" : "transparent"};border:1px solid ${projFilter === s.key ? s.color : "var(--line)"};border-radius:8px;padding:8px 11px;margin-bottom:5px;cursor:pointer;color:inherit;transition:border-color .15s">
     <span style="width:12px;height:12px;border-radius:3px;background:${s.color};flex:0 0 auto"></span>
     <span style="flex:1;font-size:12.5px">${esc(s.label)}</span>
-    <span class="mono" style="font-weight:800;font-size:13px">${s.count}</span></button>`).join("");
+    <span class="mono muted" style="font-size:10px">${Math.round(s.count / total * 100)}%</span>
+    <span class="mono" style="font-weight:800;font-size:14px;min-width:22px;text-align:right">${s.count}</span>
+    <span class="mono muted" style="font-size:13px">›</span></button>`).join("");
+}
+function statusPill(sc) {
+  if (!sc.status) return "";
+  const c = sc.status.color;
+  return `<span class="mono" style="font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:10px;background:${c}22;color:${c};border:1px solid ${c}66;white-space:nowrap">${esc(sc.status.label)}</span>`;
 }
 function propSelectRow(p) {
-  const ph = phaseMeta(propPhase(p)); const m = dealMetrics(p);
-  return `<div class="row" data-open-prop="${p.id}" style="cursor:pointer">
-    <div class="body"><div class="t">${esc(p.name)}</div>
-      <div class="m"><span class="tag" style="border-color:${ph.color}">${esc(ph.label)}</span>${p.address ? `<span>▦ ${esc(p.address)}</span>` : ""}${m.hasReturns ? `<span class="mono" style="color:var(--ok,#28b478)">${money0(m.profit)}</span>` : ""}</div></div>
-    <div class="actions"><span class="mono muted" style="font-size:14px">›</span></div>
+  const ph = phaseMeta(propPhase(p)), m = dealMetrics(p), sc = scheduleMetrics(p);
+  const tgt = p.targetDate ? fmtDate(p.targetDate) : null;
+  const sub = p.nextStep || ph.label;
+  return `<div class="row" data-open-prop="${p.id}" style="cursor:pointer;align-items:flex-start;gap:0">
+    <div style="width:10px;height:10px;border-radius:3px;background:${ph.color};margin:6px 11px 0 0;flex:0 0 auto"></div>
+    <div class="body" style="flex:1;min-width:0">
+      <div class="flex between" style="gap:8px;align-items:center"><div class="t" style="font-size:14px">${esc(p.name)}</div>${statusPill(sc)}</div>
+      <div class="m" style="white-space:normal;color:var(--ink-soft,inherit)">${esc(sub)}</div>
+      <div class="mono muted" style="font-size:10px;margin-top:3px">${sc.stages[sc.idx] ? esc(sc.stages[sc.idx]) : ""}${tgt ? ` · finish ${tgt}` : ""}${m.hasReturns ? ` · <span style="color:#28b478">${money0(m.profit)} profit</span>` : ""}</div>
+    </div>
+    <div class="actions"><span class="mono muted" style="font-size:16px">›</span></div>
   </div>`;
 }
 
@@ -1425,6 +1439,12 @@ VIEWS.builds = {
           <div class="panel-title" style="margin:0">${esc(phaseMeta(projFilter).label)} · ${filtered.length}</div>
           <button class="btn sm ghost" data-proj-filter="clear">← all</button>
         </div>
+        ${projFilter === "active" ? (() => {
+          const st = filtered.map(scheduleMetrics).filter((x) => x.status);
+          if (!st.length) return "";
+          const onT = st.filter((x) => x.status.label === "On track" || x.status.label === "Complete").length, beh = st.length - onT;
+          return `<div class="mono muted" style="font-size:11px;margin-bottom:8px">${onT} on track${beh ? ` · <span style="color:#e0913a;font-weight:700">${beh} behind</span>` : " · all on schedule ✓"}</div>`;
+        })() : ""}
         ${projFilter === "active" ? activeBudget() : ""}
         <div class="panel">
           ${filtered.length ? filtered.map(propSelectRow).join("") : `<div class="empty">Nothing in this category yet.</div>`}
@@ -1545,10 +1565,10 @@ function scheduleMetrics(p) {
     let behind = 0;
     if (phaseDates.length) { const dueLeave = parseISO(phaseDates[Math.min(idx + 1, n - 1)]); if (dueLeave) behind = Math.round((todayDate() - dueLeave) / DAY); }
     let label, color;
-    if (complete) { label = "Complete"; color = "var(--ok,#28b478)"; }
+    if (complete) { label = "Complete"; color = "#28b478"; }
     else if (overdue) { label = `Overdue ${Math.round((todayDate() - done) / DAY)}d`; color = "#dc5050"; }
     else if (behind > 3) { label = `${behind}d behind`; color = "#e0913a"; }
-    else { label = "On track"; color = "var(--ok,#28b478)"; }
+    else { label = "On track"; color = "#28b478"; }
     const total = Math.max(1, Math.round((done - start) / DAY));
     const elapsed = Math.round((todayDate() - start) / DAY);
     status = { label, color, plannedFrac, actualFrac, elapsed, total, notStarted: elapsed < 0 };
