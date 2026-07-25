@@ -1356,6 +1356,18 @@ function propPhase(p) {
   return "completed";
 }
 function phaseMeta(key) { return PHASES.find((x) => x.key === key) || { label: key, color: "var(--line)" }; }
+function coverPhoto(propId) {
+  const ph = state.photos.filter((x) => x.propertyId === propId).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+  return ph ? ph.dataUrl : null;
+}
+// A project needs attention if it's behind schedule or over budget with real spend.
+function needsAttention(p) {
+  if (propPhase(p) !== "active") return { any: false };
+  const sc = scheduleMetrics(p), b = budgetMetrics(p);
+  const behind = !!(sc.status && (sc.status.label.includes("behind") || sc.status.label.includes("Overdue")));
+  const over = b.over && b.spent > 0;
+  return { behind, over, any: behind || over };
+}
 let projFilter = null;   // which phase segment is selected on Active Projects
 let selectedProp = null; // which property is opened for detail
 
@@ -1387,12 +1399,16 @@ function propSelectRow(p) {
   const ph = phaseMeta(propPhase(p)), m = dealMetrics(p), sc = scheduleMetrics(p);
   const tgt = p.targetDate ? fmtDate(p.targetDate) : null;
   const sub = p.nextStep || ph.label;
-  return `<div class="row" data-open-prop="${p.id}" style="cursor:pointer;align-items:flex-start;gap:0">
-    <div style="width:10px;height:10px;border-radius:3px;background:${ph.color};margin:6px 11px 0 0;flex:0 0 auto"></div>
+  const cover = coverPhoto(p.id), att = needsAttention(p);
+  const avatar = cover
+    ? `<img src="${cover}" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover;margin-right:12px;flex:0 0 auto">`
+    : `<div style="width:44px;height:44px;border-radius:8px;background:${ph.color}22;border:1px solid ${ph.color}55;margin-right:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center"><span style="width:12px;height:12px;border-radius:3px;background:${ph.color}"></span></div>`;
+  return `<div class="row" data-open-prop="${p.id}" style="cursor:pointer;align-items:center;gap:0">
+    ${avatar}
     <div class="body" style="flex:1;min-width:0">
-      <div class="flex between" style="gap:8px;align-items:center"><div class="t" style="font-size:14px">${esc(p.name)}</div>${statusPill(sc)}</div>
-      <div class="m" style="white-space:normal;color:var(--ink-soft,inherit)">${esc(sub)}</div>
-      <div class="mono muted" style="font-size:10px;margin-top:3px">${sc.stages[sc.idx] ? esc(sc.stages[sc.idx]) : ""}${tgt ? ` · finish ${tgt}` : ""}${m.hasReturns ? ` · <span style="color:#28b478">${money0(m.profit)} profit</span>` : ""}</div>
+      <div class="flex between" style="gap:8px;align-items:center"><div class="t" style="font-size:14px">${att.any ? `<span style="width:8px;height:8px;border-radius:50%;background:#dc5050;display:inline-block;margin-right:6px" title="needs attention"></span>` : ""}${esc(p.name)}</div>${statusPill(sc)}</div>
+      <div class="m" style="white-space:normal">${esc(sub)}</div>
+      <div class="mono muted" style="font-size:10px;margin-top:3px">${sc.stages[sc.idx] ? esc(sc.stages[sc.idx]) : ""}${tgt ? ` · finish ${tgt}` : ""}${m.hasReturns ? ` · <span style="color:#28b478">${money0(m.profit)} profit</span>` : ""}${att.over ? ` · <span style="color:#dc5050">over budget</span>` : ""}</div>
     </div>
     <div class="actions"><span class="mono muted" style="font-size:16px">›</span></div>
   </div>`;
@@ -1402,7 +1418,8 @@ VIEWS.builds = {
   render() {
     const segs = PHASES.map((ph) => ({ ...ph, count: state.properties.filter((p) => propPhase(p) === ph.key).length }));
     const sel = selectedProp ? state.properties.find((p) => p.id === selectedProp) : null;
-    const filtered = projFilter ? state.properties.filter((p) => propPhase(p) === projFilter).sort((a, b) => (a.name || "").localeCompare(b.name || "")) : null;
+    const filtered = projFilter ? state.properties.filter((p) => propPhase(p) === projFilter).sort((a, b) => ((needsAttention(b).any ? 1 : 0) - (needsAttention(a).any ? 1 : 0)) || (a.name || "").localeCompare(b.name || "")) : null;
+    const attn = state.properties.filter((p) => needsAttention(p).any).length;
     const activeBudget = () => {
       const bAll = state.properties.filter((p) => propPhase(p) === "active").map(budgetMetrics);
       const tB = bAll.reduce((s, x) => s + x.budget, 0), tS = bAll.reduce((s, x) => s + x.spent, 0), tE = bAll.reduce((s, x) => s + x.eac, 0), tV = bAll.reduce((s, x) => s + x.variance, 0);
@@ -1418,6 +1435,11 @@ VIEWS.builds = {
     <div class="view">
       <div class="view-head"><div><div class="eyebrow">Portfolio</div><h1>Active Projects</h1></div>
         <button class="btn primary" data-new-build>+ New project</button></div>
+
+      ${attn ? `<button data-proj-filter="active" style="width:100%;text-align:left;display:flex;align-items:center;gap:11px;padding:13px 15px;margin-bottom:14px;border:1px solid #dc5050;background:#dc50501a;border-radius:12px;cursor:pointer;color:inherit">
+        <span style="font-size:19px">⚠️</span>
+        <span style="flex:1"><span style="font-weight:800">${attn} project${attn > 1 ? "s" : ""} need attention</span> <span class="muted" style="font-size:11.5px">— behind schedule or over budget</span></span>
+        <span class="mono muted">review ›</span></button>` : ""}
 
       <div class="panel mb">
         <div class="panel-title"><span class="n">◑</span> Portfolio at a glance</div>
@@ -1622,8 +1644,10 @@ function projectCard(p) {
   const tasks = openTasks().filter((t) => t.propertyId === p.id);
   const nextStep = p.nextStep || (tasks[0] && tasks[0].title) || "Set the next step in Edit deal";
   const tgt = p.targetDate ? dueMeta(p.targetDate) : null;
+  const cover = coverPhoto(p.id);
   return `
   <div class="panel mb" style="padding:16px">
+    ${cover ? `<div style="height:130px;border-radius:10px;overflow:hidden;margin-bottom:14px"><img src="${cover}" alt="" style="width:100%;height:100%;object-fit:cover"></div>` : ""}
     <div class="flex between wrap" style="align-items:flex-start;gap:10px">
       <div>
         <div style="font-size:17px;font-weight:800">${esc(p.name)}</div>
