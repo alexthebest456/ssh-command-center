@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -16,9 +16,9 @@ const COLLECTIONS = [
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
-// The app always opens on the "Now" front door — one thing at a time, no wall
-// of dashboards. Navigation within a session still works normally.
-let currentView = "now";
+// The app always opens on the executive Command Center. Navigation within a
+// session still works normally.
+let currentView = "command";
 let calMonth = startOfMonth(new Date());
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -131,13 +131,14 @@ function renderField(f, val) {
 // The four screens you actually work in, always visible. Everything else is
 // tucked under "More" so the sidebar is calm, not a wall of 19 options.
 const NAV_ESSENTIALS = [
+  { id: "command", label: "🎯 Command" },
+  { id: "builds", label: "🏗 Projects" },
   { id: "now", label: "⚡ Now" },
-  { id: "builds", label: "🏗 Active Projects" },
   { id: "academy", label: "🎓 Academy" },
-  { id: "myday", label: "📅 My Day" },
 ];
 const NAV_MORE = [
   { title: "Daily", items: [
+    { id: "myday", label: "My Day" },
     { id: "dailyos", label: "Daily Non-Negotiables" },
     { id: "goals", label: "Goals" },
     { id: "reading", label: "Reading" },
@@ -635,6 +636,96 @@ VIEWS.now = {
     root.querySelectorAll("[data-now-edit]").forEach((el) => el.addEventListener("click", () => editTask(el.dataset.nowEdit)));
     root.querySelectorAll("[data-now-add]").forEach((el) => el.addEventListener("click", () => editTaskPrefill({ due: todayISO() })));
     root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
+  },
+};
+
+// ── Executive Command Center — the COO front door ────────────────────────────
+const WAITING_LABELS = { city: "🏛 City", contractor: "👷 Contractor", consultant: "📐 Consultant", tenant: "🔑 Tenant", me: "🧠 You" };
+const HEALTH = { green: { dot: "🟢" }, yellow: { dot: "🟡" }, red: { dot: "🔴" } };
+function managedProjects() { return state.properties.filter((p) => ["active", "pipeline", "land"].includes(propPhase(p))); }
+function projHealth(p) {
+  if (p.health && HEALTH[p.health]) return p.health;
+  const sc = scheduleMetrics(p), b = budgetMetrics(p);
+  if ((sc.status && sc.status.label.includes("Overdue")) || (b.over && b.spent > 0)) return "red";
+  if (sc.status && sc.status.label.includes("behind")) return "yellow";
+  return "green";
+}
+VIEWS.command = {
+  render() {
+    const managed = managedProjects();
+    const scOf = (p) => scheduleMetrics(p);
+    const behind = (p) => { const s = scOf(p).status; return !!(s && (s.label.includes("behind") || s.label.includes("Overdue"))); };
+    const overB = (p) => { const b = budgetMetrics(p); return b.over && b.spent > 0; };
+    const staleF = (p) => { const t = p.lastUpdate; return !t || (Date.now() - t) > 7 * DAY; };
+    const active = managed.filter((p) => propPhase(p) === "active");
+    const delayed = managed.filter(behind);
+    const waiting = managed.filter((p) => ["city", "contractor", "consultant"].includes(p.waitingOn));
+    const onSched = active.filter((p) => { const s = scOf(p).status; return s && (s.label === "On track" || s.label === "Complete"); });
+    const attention = managed.filter((p) => behind(p) || overB(p) || staleF(p) || p.health === "red").sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+    const top = rankedTasks().slice(0, 5);
+    const doFirst = top[0];
+    const waitGroup = (k) => managed.filter((p) => p.waitingOn === k);
+    const calls = [...waitGroup("contractor"), ...waitGroup("consultant")];
+    const upc = [];
+    for (const p of managed) if (p.nextDeadline) { const n = daysUntil(p.nextDeadline); if (n != null && n >= 0 && n <= 60) upc.push({ date: p.nextDeadline, label: `${p.name} — ${p.nextMilestone || "deadline"}`, id: p.id }); }
+    for (const e of state.events) { const n = daysUntil(e.date); if (n != null && n >= 0 && n <= 45) upc.push({ date: e.date, label: `${e.title}${propName(e.propertyId) ? " · " + propName(e.propertyId) : ""}`, type: e.type }); }
+    upc.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+    const reason = (p) => { const s = scOf(p).status; if (s && s.label.includes("Overdue")) return `<span style="color:#dc5050">${esc(s.label)}</span>`; if (overB(p)) return `<span style="color:#dc5050">over budget</span>`; if (s && s.label.includes("behind")) return `<span style="color:#e0913a">${esc(s.label)}</span>`; if (staleF(p)) return `<span style="color:#e0913a">no update 7d+</span>`; return `<span class="muted">${esc(p.bottleneck || "on track")}</span>`; };
+    const projLine = (p, sub) => `<div class="row" data-open-project="${p.id}" style="cursor:pointer"><div class="body"><div class="t" style="font-size:13px">${HEALTH[projHealth(p)].dot} ${esc(p.name)}</div><div class="m" style="white-space:normal">${sub || reason(p)}</div></div><div class="actions"><span class="mono muted">›</span></div></div>`;
+
+    return `
+    <div class="view">
+      <div class="view-head"><div><div class="eyebrow">SSH Development · COO</div><h1>Command Center</h1></div>
+        <div class="meta">${esc(fmtLong(todayDate()))}</div></div>
+
+      ${doFirst ? `<div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
+        <div class="flex between wrap"><div class="panel-title" style="margin:0"><span class="n">🎯</span> Do this first</div><span class="tag amber">${esc(whyOneThing(doFirst))}</span></div>
+        <div style="font-size:19px;font-weight:800;margin-top:6px">${esc(doFirst.title)}</div>
+        <div class="mono muted" style="font-size:11px;margin-top:3px">${propName(doFirst.propertyId) ? "▦ " + esc(propName(doFirst.propertyId)) : "Portfolio"}</div>
+        <div class="flex mt" style="gap:8px"><button class="btn primary sm" data-one-done="${doFirst.id}">✓ Done — next</button><button class="btn sm ghost" data-goto="now">Focus mode →</button></div>
+      </div>` : ""}
+
+      <div class="grid cols-4 mb">
+        <div class="stat"><div class="k">Active</div><div class="v">${active.length}</div><div class="sub">in motion</div></div>
+        <div class="stat"><div class="k">Delayed</div><div class="v ${delayed.length ? "red" : "green"}">${delayed.length}</div><div class="sub">behind schedule</div></div>
+        <div class="stat"><div class="k">Waiting</div><div class="v ${waiting.length ? "amber" : ""}">${waiting.length}</div><div class="sub">on city / others</div></div>
+        <div class="stat"><div class="k">On Schedule</div><div class="v green">${onSched.length}</div><div class="sub">of ${active.length} active</div></div>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="panel">
+          <div class="panel-title"><span class="n">🔥</span> Today's Top 5</div>
+          ${top.length ? top.map(taskRow).join("") : `<div class="empty">No open priorities. 🎉</div>`}
+          <button class="btn sm mt" data-add-task>+ Add task</button>
+        </div>
+        <div class="panel">
+          <div class="flex between"><div class="panel-title" style="margin:0"><span class="n" style="color:var(--red)">⚠</span> Needs Attention</div><span class="badge">${attention.length}</span></div>
+          <div class="mt">${attention.length ? attention.map((p) => projLine(p)).join("") : `<div class="empty">Everything green. ✈</div>`}</div>
+        </div>
+      </div>
+
+      <div class="grid cols-2 mt">
+        <div class="panel">
+          <div class="panel-title"><span class="n">⏳</span> Waiting On</div>
+          ${["city", "consultant", "contractor"].map((k) => { const g = waitGroup(k); return g.length ? `<div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:8px 0 2px">${WAITING_LABELS[k].toUpperCase()}</div>${g.map((p) => projLine(p, `<span class="muted">${esc(p.bottleneck || "")}</span>`)).join("")}` : ""; }).join("") || `<div class="empty">Not blocked on anyone. 🙌</div>`}
+          ${calls.length ? `<div class="mono muted mt" style="font-size:10.5px">📞 Call today: ${calls.map((p) => esc(p.name)).join(", ")}</div>` : ""}
+        </div>
+        <div class="panel">
+          <div class="panel-title"><span class="n">📅</span> Upcoming</div>
+          ${upc.length ? upc.slice(0, 8).map((u) => { const dm = dueMeta(u.date); return `<div class="row"${u.id ? ` data-open-project="${u.id}" style="cursor:pointer"` : ""}><div class="body"><div class="t" style="font-size:12.5px">${esc(u.label)}</div><div class="m">${u.type ? `<span class="tag">${esc(u.type)}</span>` : ""}${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}</div></div></div>`; }).join("") : `<div class="empty">Nothing scheduled in the next 45 days.</div>`}
+        </div>
+      </div>
+
+      <div class="mt" style="text-align:center"><button class="btn sm ghost" data-goto="builds">Open all projects →</button></div>
+    </div>`;
+  },
+  mount(root) {
+    wireTaskRows(root);
+    root.querySelectorAll("[data-add-task]").forEach((el) => el.addEventListener("click", () => editTask()));
+    root.querySelectorAll("[data-one-done]").forEach((el) => el.addEventListener("click", () => { toggleTask(el.dataset.oneDone); toast("Done. 🎯"); }));
+    root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
+    root.querySelectorAll("[data-open-project]").forEach((el) => el.addEventListener("click", () => { const id = el.dataset.openProject; const p = state.properties.find((x) => x.id === id); selectedProp = id; projFilter = p ? propPhase(p) : null; go("builds"); }));
   },
 };
 
@@ -1763,6 +1854,18 @@ function editProperty(id) {
       { key: "kind", label: "Type", type: "select", options: [["active-build", "Active project"], ["pipeline", "Pipeline (coming up)"], ["rental", "Rental"], ["other", "Other"]] },
       { key: "phase", label: "Phase (portfolio chart)", type: "select", options: [["", "Auto (from type)"], ["active", "Active build"], ["pipeline", "Pipeline / acquiring"], ["land", "Land — ready to build"], ["completed", "Completed / stabilized"]] },
       { key: "nextStep", label: "Next step (shown on the card)" },
+      { key: "priority", label: "Priority", type: "select", options: [[3, "🔴 High"], [2, "🟡 Medium"], [1, "⚪ Low"]] },
+      { key: "health", label: "Overall health", type: "select", options: [["green", "🟢 On track"], ["yellow", "🟡 Needs attention"], ["red", "🔴 Critical"]] },
+      { key: "risk", label: "Risk level", type: "select", options: [["low", "Low"], ["med", "Medium"], ["high", "High"]] },
+      { key: "waitingOn", label: "Waiting on", type: "select", options: [["", "— nobody —"], ["city", "🏛 City"], ["contractor", "👷 Contractor"], ["consultant", "📐 Consultant / architect"], ["tenant", "🔑 Tenant"], ["me", "🧠 Me / decision"]] },
+      { key: "bottleneck", label: "Current bottleneck" },
+      { key: "nextMilestone", label: "Next milestone" },
+      { key: "nextDeadline", label: "Next deadline", type: "date" },
+      { key: "city", label: "City / jurisdiction" },
+      { key: "permitStatus", label: "Permit status" },
+      { key: "contractor", label: "Contractor" },
+      { key: "architect", label: "Architect" },
+      { key: "engineer", label: "Engineer" },
       { key: "startDate", label: "Start date (for the schedule bar)", type: "date" },
       { key: "targetDate", label: "Finish / target date", type: "date" },
       { key: "purchasePrice", label: "Purchase price ($)" },
@@ -1782,7 +1885,7 @@ function editProperty(id) {
       { key: "notes", label: "Notes", type: "textarea" },
     ],
     values: p,
-    onSubmit: (v) => { DB.upsert("properties", { ...p, ...v, blank: false }); toast("Saved"); },
+    onSubmit: (v) => { DB.upsert("properties", { ...p, ...v, priority: Number(v.priority) || 0, blank: false, lastUpdate: Date.now() }); toast("Saved"); },
     onDelete: () => { DB.remove("properties", p.id); },
   });
 }
@@ -2866,6 +2969,7 @@ async function boot() {
   try { await seedPersonalOS(); } catch (e) { console.warn("personal OS seed skipped", e); }
   try { await upgradePortfolio(); } catch (e) { console.warn("portfolio upgrade skipped", e); }
   try { await applyPortfolioStatuses(); } catch (e) { console.warn("portfolio status correction skipped", e); }
+  try { await applyExecSetup(); } catch (e) { console.warn("exec setup skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }

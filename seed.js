@@ -285,3 +285,80 @@ export async function applyPortfolioStatuses() {
   localStorage.setItem("sshcc:portfolio-status-v4", "1");
   console.log(`Portfolio status correction applied to ${applied} propert${applied === 1 ? "y" : "ies"}.`);
 }
+
+// ── Executive setup — align to the master project list + load priorities ─────
+// Adds projects that don't exist yet (Inglewood, Mother's REP), sets executive
+// fields (health/risk/priority/city/consultants/waiting-on/bottleneck), retires
+// Painter from active management, and seeds the current priority tasks. Runs once.
+const NEW_PROJECTS = [
+  { id: "prop-inglewood", name: "Inglewood", address: "Inglewood, CA", kind: "pipeline", phase: "pipeline", city: "Inglewood",
+    units: "", order: 30, priority: 3, risk: "med", health: "yellow", waitingOn: "me", permitStatus: "Pre-acquisition",
+    bottleneck: "Underwriting — decide max offer", nextMilestone: "Underwrite: max offer + ADU/JADU feasibility",
+    nextStep: "Underwrite — determine the absolute highest price + ADU/JADU/garage-conversion feasibility" },
+  { id: "prop-mother-rep", name: "Mother's REP Status", address: "", kind: "other", phase: "active", nonConstruction: true,
+    order: 31, priority: 2, risk: "low", health: "green", waitingOn: "me", bottleneck: "Plan the hours + documentation",
+    nextMilestone: "Complete REP status plan", nextStep: "Complete Real Estate Professional status planning" },
+];
+const EXEC_UPDATES = [
+  { match: ["prop-muller", "muller"], priority: 3, risk: "low", health: "green", city: "Downey", waitingOn: "tenant",
+    permitStatus: "In plan check", bottleneck: "Tenant to vacate garage (Aug 24)", nextMilestone: "Sign contractor agreement → start demo", nextDeadline: "2026-08-24" },
+  { match: ["prop-washington", "washington"], priority: 2, risk: "low", health: "green", city: "Bellflower", waitingOn: "",
+    permitStatus: "Permitted", bottleneck: "", nextMilestone: "Complete framing" },
+  { match: ["prop-140-12th", "140 12th", "12th st"], name: "Seal Beach ADU", priority: 3, risk: "med", health: "yellow", city: "Seal Beach",
+    waitingOn: "consultant", permitStatus: "Architect plans in progress", bottleneck: "Architect plans (~1 mo) → city (~6 mo)", nextMilestone: "Sign ADU deal + finish architect plans", nextDeadline: "2026-11-30" },
+  { match: ["prop-spry", "spry"], priority: 2, risk: "med", health: "yellow", city: "Norwalk", waitingOn: "city",
+    permitStatus: "In permit process", bottleneck: "Waiting on city permit", nextMilestone: "Permit issuance → build (~Aug 1)" },
+  { nameEquals: "arrington", priority: 2, risk: "med", health: "yellow", city: "Downey", waitingOn: "me",
+    permitStatus: "Pre-close", bottleneck: "Close (~Jul 31) → cash-for-keys + ADU planning", nextMilestone: "Close, then offer cash-for-keys" },
+  { match: ["prop-tweedy", "tweedy"], priority: 1, risk: "low", health: "green", waitingOn: "me",
+    bottleneck: "Feasibility — highest & best use", nextMilestone: "Feasibility: unit count, ADU/JADU, ROI" },
+  { match: ["prop-fidel", "fidel"], priority: 1, risk: "low", health: "green", waitingOn: "me",
+    bottleneck: "Feasibility — highest & best use", nextMilestone: "Feasibility: unit count, ADU/JADU, ROI" },
+  { match: ["prop-woodruff-nance", "woodruff", "nance"], name: "Nance", priority: 1, risk: "low", health: "green", waitingOn: "me",
+    bottleneck: "Feasibility — highest & best use", nextMilestone: "Feasibility: unit count, ADU/JADU, ROI" },
+  // Painter is GC-managed — retire it from active management (no construction tasks).
+  { match: ["prop-painter-11912", "painter"], kind: "rental", phase: "completed", waitingOn: "", bottleneck: "", gcManaged: true,
+    nextStep: "Managed by a general contractor — no active management" },
+];
+const EXEC_TASKS = [
+  { id: "tk-sealbeach-sign", title: "Sign Seal Beach ADU deal", priority: 2, propertyId: "prop-140-12th" },
+  { id: "tk-muller-agreement", title: "Sign Muller contractor agreement", priority: 2, propertyId: "prop-muller" },
+  { id: "tk-muller-demo", title: "Begin demolition at Muller", priority: 2, propertyId: "prop-muller" },
+  { id: "tk-muller-landscape", title: "Landscaping demolition at Muller", priority: 1, propertyId: "prop-muller" },
+  { id: "tk-muller-washer", title: "Relocate washer & dryer at Muller", priority: 1, propertyId: "prop-muller" },
+  { id: "tk-arrington-adu", title: "Continue ADU planning — Arrington", priority: 1, propertyId: "" },
+  { id: "tk-inglewood-uw", title: "Underwrite Inglewood + ADU planning", priority: 3, propertyId: "prop-inglewood" },
+  { id: "tk-spry-permit", title: "Follow up on Spry permit process", priority: 2, propertyId: "prop-spry" },
+  { id: "tk-washington-monitor", title: "Monitor Washington construction progress", priority: 1, propertyId: "prop-washington" },
+  { id: "tk-mother-rep", title: "Complete Mother's REP status planning", priority: 1, propertyId: "prop-mother-rep" },
+  { id: "tk-nance-feas", title: "Feasibility study — Nance", priority: 1, propertyId: "prop-woodruff-nance" },
+  { id: "tk-fidel-feas", title: "Feasibility study — Fidel", priority: 1, propertyId: "prop-fidel" },
+  { id: "tk-tweedy-feas", title: "Feasibility study — Tweedy", priority: 1, propertyId: "prop-tweedy" },
+];
+
+export async function applyExecSetup() {
+  if (localStorage.getItem("sshcc:exec-v1")) return;
+  const props = DB.getAll("properties");
+  if (!props.length) return;
+  const now = Date.now();
+  const find = (u) => u.nameEquals
+    ? props.find((x) => (x.name || "").trim().toLowerCase() === u.nameEquals)
+    : (props.find((x) => u.match.includes(x.id)) || props.find((x) => u.match.some((m) => (x.name || "").toLowerCase().includes(m) || (x.address || "").toLowerCase().includes(m))));
+
+  for (const u of EXEC_UPDATES) {
+    const p = find(u); if (!p) continue;
+    const { match, nameEquals, ...fields } = u;
+    await DB.upsert("properties", { ...p, ...fields, lastUpdate: now });
+  }
+  for (const np of NEW_PROJECTS) {
+    if (props.some((x) => x.id === np.id)) continue;
+    await DB.upsert("properties", { kind: "active-build", stage: "", stageIndex: 0, stages: DEFAULT_STAGES, lastUpdate: now, ...np });
+  }
+  const tasks = DB.getAll("tasks");
+  for (const t of EXEC_TASKS) {
+    if (tasks.some((x) => x.id === t.id)) continue;
+    await DB.upsert("tasks", { id: t.id, title: t.title, status: "open", priority: t.priority ?? 1, propertyId: t.propertyId || "", due: t.due || "", tags: ["dev"] });
+  }
+  localStorage.setItem("sshcc:exec-v1", "1");
+  console.log("Executive setup applied.");
+}
