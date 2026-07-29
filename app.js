@@ -149,6 +149,7 @@ const NAV_MORE = [
     { id: "backlog", label: "Backlog" },
   ]},
   { title: "Properties", items: [
+    { id: "money", label: "💰 True Net" },
     { id: "calendar", label: "Property Calendar" },
     { id: "maintenance", label: "Maintenance" },
     { id: "leases", label: "Leases & Rent" },
@@ -692,6 +693,12 @@ VIEWS.command = {
         <div class="stat"><div class="k">Waiting</div><div class="v ${waiting.length ? "amber" : ""}">${waiting.length}</div><div class="sub">on city / others</div></div>
         <div class="stat"><div class="k">On Schedule</div><div class="v green">${onSched.length}</div><div class="sub">of ${active.length} active</div></div>
       </div>
+
+      ${(() => { const n = portfolioNet(); const c = n.net >= 0 ? "#28b478" : "#dc5050";
+        return `<div class="panel mb" data-goto="money" style="cursor:pointer;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div><div class="mono muted" style="font-size:10px;letter-spacing:.04em">💰 TRUE NET / MO</div><div style="font-size:26px;font-weight:900;color:${c}">${money0(n.net)}</div></div>
+          <div class="mono muted" style="font-size:11px;flex:1;min-width:180px">Gross ${money0(n.gross)} − exp ${money0(n.exp)} − debt ${money0(n.debt)}<br><span style="${n.vacant ? "color:#e0913a" : ""}">${n.occPct}% occupied · ${n.vacant} vacant</span></div>
+          <span class="mono muted">details ›</span></div>`; })()}
 
       <div class="grid cols-2">
         <div class="panel">
@@ -2229,6 +2236,17 @@ function getAssumptions() {
 function propMonthlyRent(pid) { return state.leases.filter((l) => l.propertyId === pid).reduce((a, l) => a + (Number(l.currentRent) || 0), 0); }
 function portfolioRent() { return state.leases.reduce((a, l) => a + (Number(l.currentRent) || 0), 0); }
 function currentDoors() { return state.properties.reduce((a, p) => a + (Number(p.units) || 0), 0); }
+// Live "true net" — collected rent (from active leases) minus operating expenses
+// and debt service across the whole portfolio. Recomputes on every data change,
+// so acquisitions and move-ins/move-outs update it instantly.
+function portfolioNet() {
+  const gross = portfolioRent();
+  const exp = state.properties.reduce((s, p) => s + (Number(p.monthlyExpenses) || 0), 0);
+  const debt = state.properties.reduce((s, p) => s + (Number(p.loanPayment) || 0), 0);
+  const doors = currentDoors();
+  const occupied = state.leases.length; // one active lease ≈ one occupied unit
+  return { gross, exp, debt, net: gross - exp - debt, doors, occupied, vacant: Math.max(0, doors - occupied), occPct: doors ? Math.round(occupied / doors * 100) : 0 };
+}
 
 function projectIncome(monthsAhead) {
   const a = getAssumptions();
@@ -2324,6 +2342,51 @@ VIEWS.performance = {
   mount(root) {
     root.querySelectorAll("[data-fin]").forEach((el) => el.addEventListener("click", () => editFinancials(el.dataset.fin)));
     root.querySelectorAll("[data-edit-assump]").forEach((el) => el.addEventListener("click", () => editAssumptions()));
+  },
+};
+
+VIEWS.money = {
+  render() {
+    const n = portfolioNet();
+    const rows = state.properties.map((p) => ({ p, r: propReturns(p) })).filter((x) => x.r.rent > 0 || x.r.hasFin).sort((a, b) => b.r.cfM - a.r.cfM);
+    const col = n.net >= 0 ? "#28b478" : "#dc5050";
+    return `
+    <div class="view">
+      <div class="view-head"><div><div class="eyebrow">Portfolio · live</div><h1>True Net</h1></div>
+        <div class="mono muted" style="font-size:11px">updates as tenants & deals change</div></div>
+
+      <div class="panel mb" style="text-align:center;padding:22px">
+        <div class="mono muted" style="font-size:11px;letter-spacing:.05em">TRUE NET CASH FLOW / MONTH</div>
+        <div style="font-size:44px;font-weight:900;color:${col};line-height:1.1;margin:4px 0">${money0(n.net)}</div>
+        <div class="mono muted" style="font-size:12px">${money0(n.net * 12)} / year</div>
+        <div class="mono muted" style="font-size:12px;margin-top:10px">Gross rent ${money0(n.gross)} <span style="color:#dc5050">− expenses ${money0(n.exp)}</span> <span style="color:#dc5050">− debt ${money0(n.debt)}</span></div>
+      </div>
+
+      <div class="grid cols-3 mb">
+        <div class="stat"><div class="k">Occupancy</div><div class="v ${n.occPct >= 90 ? "green" : n.occPct >= 75 ? "amber" : "red"}">${n.occPct}%</div><div class="sub">${n.occupied}/${n.doors} units</div></div>
+        <div class="stat"><div class="k">Vacant</div><div class="v ${n.vacant ? "red" : "green"}">${n.vacant}</div><div class="sub">${n.vacant ? "lost rent" : "fully leased"}</div></div>
+        <div class="stat"><div class="k">Gross Rent</div><div class="v green" style="font-size:22px">${money0(n.gross)}</div><div class="sub">/mo collected</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="flex between"><div class="panel-title" style="margin:0"><span class="n">▸</span> Rent roll</div><button class="btn sm ghost" data-goto="leases">Manage tenants →</button></div>
+        <div class="fbar-row" style="grid-template-columns:1.6fr 1fr 1fr 1fr 1fr;font-family:var(--mono);font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px;border:none;margin:6px 0 4px">
+          <div>Property</div><div>Rent/mo</div><div>Expenses</div><div>Debt</div><div>Net/mo</div>
+        </div>
+        ${rows.length ? rows.map(({ p, r }) => `<div class="fbar-row" data-fin="${p.id}" style="grid-template-columns:1.6fr 1fr 1fr 1fr 1fr;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:6px">
+          <div style="font-weight:600;font-size:12.5px">${esc(p.name)}</div>
+          <div class="mono">${money0(r.rent)}</div>
+          <div class="mono muted">${r.exp ? "−" + money0(r.exp) : "—"}</div>
+          <div class="mono muted">${r.debt ? "−" + money0(r.debt) : "—"}</div>
+          <div class="mono" style="font-weight:800;color:${r.cfM >= 0 ? "#28b478" : "#dc5050"}">${money0(r.cfM)}</div>
+        </div>`).join("") : `<div class="empty">No rent or financials yet. Add tenants in Leases and expenses per property.</div>`}
+        <div class="mono muted mt" style="font-size:11px">Tap a property to set expenses & debt. Rent comes from active leases — add/remove a tenant and this whole page updates.</div>
+      </div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-fin]").forEach((el) => el.addEventListener("click", () => editFinancials(el.dataset.fin)));
+    root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
   },
 };
 
