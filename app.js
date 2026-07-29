@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -12,13 +12,14 @@ const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
   "habits", "habitLog", "goals", "books", "workouts", "academy", "vocab",
-  "quizLog",
+  "quizLog", "cashEvents",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
-// The app always opens on the executive Command Center. Navigation within a
-// session still works normally.
-let currentView = "command";
+// Two profiles: "alex" (full operator detail) and "dad" (investor overview).
+let profile = localStorage.getItem("sshcc:profile") || "alex";
+// Alex opens on the Command Center; Dad opens on the Investor Overview.
+let currentView = profile === "dad" ? "investor" : "command";
 let calMonth = startOfMonth(new Date());
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -150,6 +151,7 @@ const NAV_MORE = [
   ]},
   { title: "Properties", items: [
     { id: "money", label: "💰 True Net" },
+    { id: "cashflow", label: "💸 Cash Flow" },
     { id: "calendar", label: "Property Calendar" },
     { id: "maintenance", label: "Maintenance" },
     { id: "leases", label: "Leases & Rent" },
@@ -158,6 +160,7 @@ const NAV_MORE = [
     { id: "content", label: "Content Calendar" },
   ]},
   { title: "Review", items: [
+    { id: "investor", label: "Investor Overview (Dad)" },
     { id: "performance", label: "Portfolio Performance" },
     { id: "scorecard", label: "Monthly Scorecard" },
     { id: "weekly", label: "Weekly Review" },
@@ -187,19 +190,35 @@ function navBtn(item) {
     ${b ? `<span class="badge">${b}</span>` : ""}
   </button>`;
 }
+const DAD_NAV = [
+  { id: "investor", label: "📊 Overview" },
+  { id: "builds", label: "🏗 Projects" },
+  { id: "money", label: "💰 True Net" },
+  { id: "cashflow", label: "💸 Cash Flow" },
+];
+function setProfile(p) {
+  profile = p;
+  localStorage.setItem("sshcc:profile", p);
+  currentView = p === "dad" ? "investor" : "command";
+  renderNav(); render();
+}
 function renderNav() {
-  const moreActive = NAV_MORE.some((g) => g.items.some((it) => it.id === currentView));
-  $("#nav").innerHTML = `
-    <div class="nav-group">
-      <div class="nav-group-title">Focus</div>
-      ${NAV_ESSENTIALS.map(navBtn).join("")}
-    </div>
-    <details class="nav-more" ${moreActive ? "open" : ""}>
-      <summary class="nav-group-title" style="cursor:pointer;list-style:none;user-select:none">More ▾</summary>
-      ${NAV_MORE.map((g) => `<div class="nav-group"><div class="nav-group-title">${esc(g.title)}</div>${g.items.map(navBtn).join("")}</div>`).join("")}
-    </details>`;
-  $("#nav").querySelectorAll("[data-nav]").forEach((b) =>
-    b.addEventListener("click", () => go(b.dataset.nav)));
+  const toggle = `<div style="display:flex;gap:4px;padding:4px;margin-bottom:14px;background:var(--panel-2,rgba(127,127,127,.12));border-radius:9px">
+    ${[["alex", "Alex"], ["dad", "Dad"]].map(([k, l]) => `<button data-profile="${k}" style="flex:1;padding:6px 4px;border-radius:7px;border:none;cursor:pointer;font-size:12px;font-weight:800;background:${profile === k ? "var(--amber,#e0913a)" : "transparent"};color:${profile === k ? "#0e1420" : "inherit"}">${l}</button>`).join("")}</div>`;
+  let body;
+  if (profile === "dad") {
+    body = `<div class="nav-group"><div class="nav-group-title">Investor</div>${DAD_NAV.map(navBtn).join("")}</div>`;
+  } else {
+    const moreActive = NAV_MORE.some((g) => g.items.some((it) => it.id === currentView));
+    body = `<div class="nav-group"><div class="nav-group-title">Focus</div>${NAV_ESSENTIALS.map(navBtn).join("")}</div>
+      <details class="nav-more" ${moreActive ? "open" : ""}>
+        <summary class="nav-group-title" style="cursor:pointer;list-style:none;user-select:none">More ▾</summary>
+        ${NAV_MORE.map((g) => `<div class="nav-group"><div class="nav-group-title">${esc(g.title)}</div>${g.items.map(navBtn).join("")}</div>`).join("")}
+      </details>`;
+  }
+  $("#nav").innerHTML = toggle + body;
+  $("#nav").querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => go(b.dataset.nav)));
+  $("#nav").querySelectorAll("[data-profile]").forEach((b) => b.addEventListener("click", () => setProfile(b.dataset.profile)));
 }
 
 function go(id) {
@@ -734,6 +753,55 @@ VIEWS.command = {
     root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
     root.querySelectorAll("[data-open-project]").forEach((el) => el.addEventListener("click", () => { const id = el.dataset.openProject; const p = state.properties.find((x) => x.id === id); selectedProp = id; projFilter = p ? propPhase(p) : null; go("builds"); }));
   },
+};
+
+// ── Investor Overview — the "Dad" profile: big picture, read-only ────────────
+VIEWS.investor = {
+  render() {
+    const managed = managedProjects();
+    const builds = managed.filter((p) => propPhase(p) === "active");
+    const scOf = (p) => scheduleMetrics(p);
+    const onT = builds.filter((p) => { const s = scOf(p).status; return !s || s.label === "On track" || s.label === "Complete"; }).length;
+    const beh = builds.length - onT;
+    const allGood = beh === 0;
+    const n = portfolioNet();
+    const cash = cashSchedule();
+    const upcOut = cash.rows.filter((r) => cashSigned(r.e) < 0 && r.e.status !== "done").slice(0, 6);
+    const progressOf = (p) => { const sc = scOf(p); return Math.round((sc.idx / Math.max(1, sc.n - 1)) * 100); };
+    return `
+    <div class="view">
+      <div class="view-head"><div><div class="eyebrow">SSH Development · Investor</div><h1>Overview</h1></div>
+        <div class="meta">${esc(fmtLong(todayDate()))}</div></div>
+
+      <div class="panel mb" style="border:1.5px solid ${allGood ? "#28b47855" : "#e0913a55"};background:${allGood ? "#28b4781a" : "#e0913a1a"}">
+        <div style="font-size:16px;font-weight:800">${allGood ? "🟢 Everything on track" : `🟡 ${beh} project${beh > 1 ? "s" : ""} need attention`}</div>
+        <div class="muted" style="font-size:12px;margin-top:2px">${builds.length} active build${builds.length !== 1 ? "s" : ""} · ${onT} on schedule${beh ? ` · ${beh} behind` : ""}</div>
+      </div>
+
+      <div class="grid cols-3 mb">
+        <div class="stat"><div class="k">True Net / mo</div><div class="v ${n.net >= 0 ? "green" : "red"}" style="font-size:22px">${money0(n.net)}</div><div class="sub">${money0(n.net * 12)}/yr</div></div>
+        <div class="stat"><div class="k">Occupancy</div><div class="v ${n.occPct >= 90 ? "green" : "amber"}">${n.occPct}%</div><div class="sub">${n.occupied}/${n.doors} units</div></div>
+        <div class="stat"><div class="k">Cash After Plans</div><div class="v ${cash.end >= 0 ? "green" : "red"}" style="font-size:20px">${money0(cash.end)}</div><div class="sub">low ${money0(cash.low.bal)}</div></div>
+      </div>
+
+      <div class="panel mb">
+        <div class="panel-title"><span class="n">🏗</span> Current Builds &amp; Progress</div>
+        ${builds.length ? builds.map((p) => { const sc = scOf(p), pct = progressOf(p);
+          return `<div style="padding:9px 0;border-bottom:1px solid var(--line)">
+            <div class="flex between" style="align-items:center"><div style="font-weight:600;font-size:13.5px">${HEALTH[projHealth(p)].dot} ${esc(p.name)}</div>${statusPill(sc)}</div>
+            <div class="bar" style="margin-top:5px"><span class="ok" style="width:${pct}%"></span></div>
+            <div class="mono muted" style="font-size:10.5px;margin-top:4px">${esc(sc.stages[sc.idx] || "")} · ${pct}%${p.nextMilestone ? ` · next: ${esc(p.nextMilestone)}` : ""}${p.targetDate ? ` · done ${fmtDate(p.targetDate)}` : ""}</div>
+          </div>`; }).join("") : `<div class="empty">No active builds.</div>`}
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span class="n">💸</span> Money Going Out — next</div>
+        ${upcOut.length ? upcOut.map((r) => { const t = cashType(r.e.type), dm = dueMeta(r.e.date);
+          return `<div class="row"><div class="body"><div class="t" style="font-size:13px">${t.icon} ${esc(t.label)}${propName(r.e.propertyId) ? ` · ${esc(propName(r.e.propertyId))}` : ""}${r.e.note ? ` — ${esc(r.e.note)}` : ""}</div><div class="m">${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}</div></div><div class="mono" style="font-weight:800;color:#dc5050;flex:0 0 auto">−${money0(Number(r.e.amount) || 0)}</div></div>`; }).join("") : `<div class="empty">Nothing scheduled to go out yet.</div>`}
+      </div>
+    </div>`;
+  },
+  mount() {},
 };
 
 // ── Personal · Contractor Academy (CSLB "B" apprenticeship curriculum) ───────
@@ -2390,6 +2458,90 @@ VIEWS.money = {
   },
 };
 
+// ── Cash-out schedule — money leaving (and coming in) over time ──────────────
+const CASH_TYPES = {
+  "down-payment": { label: "Down payment", icon: "🏦", dir: "out" },
+  "closing": { label: "Closing costs", icon: "📝", dir: "out" },
+  "cash-for-keys": { label: "Cash for keys", icon: "🔑", dir: "out" },
+  "architect": { label: "Architect / design", icon: "📐", dir: "out" },
+  "permit-fee": { label: "Permit / city fees", icon: "🏛", dir: "out" },
+  "invoice": { label: "Contractor invoice", icon: "👷", dir: "out" },
+  "remodel": { label: "Remodel / construction", icon: "🔨", dir: "out" },
+  "material": { label: "Materials", icon: "📦", dir: "out" },
+  "refinance": { label: "Refinance (cash in)", icon: "💵", dir: "in" },
+  "other": { label: "Other", icon: "•", dir: "out" },
+};
+function cashType(t) { return CASH_TYPES[t] || CASH_TYPES.other; }
+function bankStart() { const m = state.meta.find((x) => x.id === "bank"); return m ? Number(m.balance) || 0 : 0; }
+function cashSigned(e) { const dir = e.direction || cashType(e.type).dir; return (dir === "in" ? 1 : -1) * (Number(e.amount) || 0); }
+function cashSchedule() {
+  const evs = (state.cashEvents || []).slice().sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+  let bal = bankStart(); const low = { bal, date: "today" };
+  const rows = evs.map((e) => { bal += cashSigned(e); if (bal < low.bal) { low.bal = bal; low.date = e.date; } return { e, bal }; });
+  return { rows, start: bankStart(), end: bal, low };
+}
+
+VIEWS.cashflow = {
+  render() {
+    const s = cashSchedule();
+    const byMonth = {};
+    for (const row of s.rows) { const m = (row.e.date || "").slice(0, 7) || "undated"; (byMonth[m] = byMonth[m] || []).push(row); }
+    const months = Object.keys(byMonth).sort();
+    const monthName = (ym) => ym === "undated" ? "Undated" : parseISO(ym + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const evRow = ({ e, bal }) => { const t = cashType(e.type), amt = cashSigned(e), dm = dueMeta(e.date);
+      return `<div class="row" data-edit-cash="${e.id}" style="cursor:pointer">
+        <div class="body"><div class="t" style="font-size:13px">${t.icon} ${esc(t.label)}${propName(e.propertyId) ? ` · ${esc(propName(e.propertyId))}` : ""}${e.note ? ` — ${esc(e.note)}` : ""}</div>
+          <div class="m">${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}${e.status === "done" ? `<span class="tag green">paid</span>` : ""}</div></div>
+        <div style="text-align:right;flex:0 0 auto"><div class="mono" style="font-weight:800;color:${amt < 0 ? "#dc5050" : "#28b478"}">${amt < 0 ? "−" : "+"}${money0(Math.abs(amt))}</div>
+          <div class="mono muted" style="font-size:10px">bal ${money0(bal)}</div></div>
+      </div>`; };
+    return `
+    <div class="view">
+      <div class="view-head"><div><div class="eyebrow">Capital · live</div><h1>Cash Flow</h1></div>
+        <button class="btn primary" data-add-cash>+ Money event</button></div>
+
+      <div class="grid cols-3 mb">
+        <div class="stat" data-edit-bank style="cursor:pointer"><div class="k">In Bank Now</div><div class="v" style="font-size:22px">${money0(s.start)}</div><div class="sub">tap to update</div></div>
+        <div class="stat"><div class="k">After Scheduled</div><div class="v ${s.end >= 0 ? "green" : "red"}" style="font-size:22px">${money0(s.end)}</div><div class="sub">once all clears</div></div>
+        <div class="stat"><div class="k">Lowest Point</div><div class="v ${s.low.bal >= 0 ? "green" : "red"}" style="font-size:22px">${money0(s.low.bal)}</div><div class="sub">${s.low.date === "today" ? "today" : "≈ " + fmtDate(s.low.date)}</div></div>
+      </div>
+
+      ${s.low.bal < 0 ? `<div class="panel mb" style="border:1px solid #dc5050;background:#dc50501a"><span style="font-weight:700;color:#dc5050">⚠ Cash dips below zero around ${fmtDate(s.low.date)}</span> — line up financing or reschedule an outflow.</div>` : ""}
+
+      ${months.length ? months.map((m) => `<div class="panel mb">
+        <div class="panel-title"><span class="n">📅</span> ${esc(monthName(m))} <span class="mono muted" style="margin-left:auto;font-weight:400">${money0(byMonth[m].reduce((a, r) => a + cashSigned(r.e), 0))}</span></div>
+        ${byMonth[m].map(evRow).join("")}
+      </div>`).join("") : `<div class="panel"><div class="empty">No money events yet. Add down payments, cash-for-keys, invoices, remodel draws & refinances to project your bank balance.</div></div>`}
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-add-cash]").forEach((el) => el.addEventListener("click", () => editCashEvent()));
+    root.querySelectorAll("[data-edit-cash]").forEach((el) => el.addEventListener("click", () => editCashEvent(el.dataset.editCash)));
+    root.querySelectorAll("[data-edit-bank]").forEach((el) => el.addEventListener("click", () => editBank()));
+  },
+};
+function editBank() {
+  const m = state.meta.find((x) => x.id === "bank") || {};
+  formModal({ title: "Cash in bank", fields: [{ key: "balance", label: "Current bank balance ($)", type: "number" }], values: { balance: m.balance || "" }, onSubmit: (v) => { DB.upsert("meta", { id: "bank", balance: Number(v.balance) || 0 }); toast("Balance updated"); } });
+}
+function editCashEvent(id) {
+  const e = id ? state.cashEvents.find((x) => x.id === id) : null;
+  formModal({
+    title: e ? "Edit money event" : "New money event",
+    fields: [
+      { key: "type", label: "Type", type: "select", options: Object.entries(CASH_TYPES).map(([k, v]) => [k, v.icon + " " + v.label]) },
+      { key: "amount", label: "Amount ($)", type: "number" },
+      { key: "date", label: "Date", type: "date" },
+      { key: "propertyId", label: "Property", type: "select", options: propOptions() },
+      { key: "note", label: "Note" },
+      { key: "status", label: "Status", type: "select", options: [["scheduled", "Scheduled"], ["done", "Paid / done"]] },
+    ],
+    values: e || { type: "invoice", status: "scheduled" },
+    onSubmit: (v) => { DB.upsert("cashEvents", { ...(e || { id: undefined }), ...v, amount: Number(v.amount) || 0 }); toast("Saved"); },
+    onDelete: e ? () => DB.remove("cashEvents", e.id) : null,
+  });
+}
+
 function editFinancials(pid) {
   const p = state.properties.find((x) => x.id === pid); if (!p) return;
   formModal({
@@ -3033,6 +3185,7 @@ async function boot() {
   try { await upgradePortfolio(); } catch (e) { console.warn("portfolio upgrade skipped", e); }
   try { await applyPortfolioStatuses(); } catch (e) { console.warn("portfolio status correction skipped", e); }
   try { await applyExecSetup(); } catch (e) { console.warn("exec setup skipped", e); }
+  try { await applyCashSeed(); } catch (e) { console.warn("cash seed skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }

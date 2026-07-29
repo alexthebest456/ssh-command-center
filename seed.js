@@ -362,3 +362,20 @@ export async function applyExecSetup() {
   localStorage.setItem("sshcc:exec-v1", "1");
   console.log("Executive setup applied.");
 }
+
+// ── Cash schedule seed — the known upcoming outflows (amounts TBD) ────────────
+const CASH_SEED = [
+  { id: "cash-arr-dp", type: "down-payment", date: "2026-07-31", propertyId: "", amount: 0, note: "Arrington close", status: "scheduled" },
+  { id: "cash-arr-cfk", type: "cash-for-keys", date: "2026-08-07", propertyId: "", amount: 0, note: "Arrington tenant buyout", status: "scheduled" },
+  { id: "cash-muller-deposit", type: "invoice", date: "2026-08-01", propertyId: "prop-muller", amount: 0, note: "Contractor deposit on signing", status: "scheduled" },
+  { id: "cash-muller-demo", type: "remodel", date: "2026-08-24", propertyId: "prop-muller", amount: 0, note: "Demolition start", status: "scheduled" },
+  { id: "cash-sealbeach-arch", type: "architect", date: "2026-08-01", propertyId: "prop-140-12th", amount: 0, note: "ADU plans", status: "scheduled" },
+  { id: "cash-spry-permit", type: "permit-fee", date: "2026-08-01", propertyId: "prop-spry", amount: 0, note: "Permit fees", status: "scheduled" },
+];
+export async function applyCashSeed() {
+  if (localStorage.getItem("sshcc:cash-v1")) return;
+  const existing = DB.getAll("cashEvents");
+  for (const c of CASH_SEED) { if (existing.some((x) => x.id === c.id)) continue; await DB.upsert("cashEvents", c); }
+  localStorage.setItem("sshcc:cash-v1", "1");
+  console.log("Cash schedule seeded.");
+}
