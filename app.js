@@ -2307,12 +2307,21 @@ function currentDoors() { return state.properties.reduce((a, p) => a + (Number(p
 // Live "true net" — collected rent (from active leases) minus operating expenses
 // and debt service across the whole portfolio. Recomputes on every data change,
 // so acquisitions and move-ins/move-outs update it instantly.
+// Effective monthly rent per property: sum of active leases, else the property's
+// own grossRent figure (so you can load rent per building without entering every
+// individual lease). Expenses: itemized tax + insurance + other if given, else the
+// combined monthlyExpenses. Debt = mortgage P&I (loanPayment).
+function effectiveRent(p) { const lease = propMonthlyRent(p.id); return lease || Number(p.grossRent) || 0; }
+function effectiveExp(p) {
+  const items = (Number(p.taxMonthly) || 0) + (Number(p.insuranceMonthly) || 0) + (Number(p.otherExpMonthly) || 0);
+  return items > 0 ? items : Number(p.monthlyExpenses) || 0;
+}
 function portfolioNet() {
-  const gross = portfolioRent();
-  const exp = state.properties.reduce((s, p) => s + (Number(p.monthlyExpenses) || 0), 0);
+  const gross = state.properties.reduce((s, p) => s + effectiveRent(p), 0);
+  const exp = state.properties.reduce((s, p) => s + effectiveExp(p), 0);
   const debt = state.properties.reduce((s, p) => s + (Number(p.loanPayment) || 0), 0);
   const doors = currentDoors();
-  const occupied = state.leases.length; // one active lease ≈ one occupied unit
+  const occupied = state.leases.length || state.properties.filter((p) => effectiveRent(p) > 0).reduce((a, p) => a + (Number(p.units) || 1), 0);
   return { gross, exp, debt, net: gross - exp - debt, doors, occupied, vacant: Math.max(0, doors - occupied), occPct: doors ? Math.round(occupied / doors * 100) : 0 };
 }
 
@@ -2330,8 +2339,8 @@ function projectIncome(monthsAhead) {
 }
 
 function propReturns(p) {
-  const rent = propMonthlyRent(p.id);
-  const exp = Number(p.monthlyExpenses) || 0;
+  const rent = effectiveRent(p);
+  const exp = effectiveExp(p);
   const noiA = (rent - exp) * 12;
   const debt = Number(p.loanPayment) || 0;
   const cfM = rent - exp - debt;
@@ -2546,13 +2555,17 @@ function editFinancials(pid) {
   const p = state.properties.find((x) => x.id === pid); if (!p) return;
   formModal({
     title: "Financials — " + p.name,
-    sub: `Rent (${money0(propMonthlyRent(pid))}/mo) comes from DoorLoop. Enter the rest for returns.`,
+    sub: `True net = rent − mortgage − expenses. Lease rent (${money0(propMonthlyRent(pid))}/mo) is used if present, otherwise the gross rent below.`,
     fields: [
+      { key: "grossRent", label: "Gross rent ($/mo — if no leases entered)", type: "number" },
+      { key: "loanPayment", label: "Mortgage payment ($/mo, P&I)", type: "number" },
+      { key: "taxMonthly", label: "Property tax ($/mo)", type: "number" },
+      { key: "insuranceMonthly", label: "Insurance ($/mo)", type: "number" },
+      { key: "otherExpMonthly", label: "Other expenses ($/mo — maint, mgmt, utilities)", type: "number" },
+      { key: "monthlyExpenses", label: "…or all operating expenses combined ($/mo)", type: "number" },
       { key: "purchasePrice", label: "Purchase price ($)", type: "number" },
       { key: "currentValue", label: "Current value ($)", type: "number" },
       { key: "loanBalance", label: "Loan balance ($)", type: "number" },
-      { key: "loanPayment", label: "Loan payment ($/mo, P&I)", type: "number" },
-      { key: "monthlyExpenses", label: "Operating expenses ($/mo — tax, ins, maint, mgmt)", type: "number" },
       { key: "cashInvested", label: "Cash invested / down payment ($)", type: "number" },
     ],
     values: p,
