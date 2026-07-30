@@ -505,6 +505,36 @@ export async function applyStrSeed() {
   console.log("STR log seeded.");
 }
 
+// ── Washington St construction draws + trade billing ─────────────────────────
+const WASH_DRAWS = [
+  { id: "draw-wash-1", num: 1, amountA: 29553.66, amountB: 32899.23, amount: 62452.89, status: "paid", date: "2026-07-15" },
+  { id: "draw-wash-2", num: 2, amountA: 40531.05, amountB: 47625.30, amount: 88156.35, status: "paid", date: "2026-07-29" },
+  { id: "draw-wash-3", num: 3, amountA: 49122.36, amountB: 57009.60, amount: 106131.96, status: "gated", date: "",
+    gate: ["Electrical rough passed", "Plumbing top-out passed", "HVAC rough passed", "Roof complete (A+ADU)", "Stucco complete", "Wall insulation in + inspected", "Drywall hung", "Lien releases D1–2 on file", "Sub prelim notices cleared", "Tankless WH matches CF1R"].map((t) => ({ t, done: false })) },
+  { id: "draw-wash-4", num: 4, amountA: 42164.28, amountB: 33702.12, amount: 75866.40, status: "future", date: "" },
+  { id: "draw-wash-5", num: 5, amountA: 17930.15, amountB: 19026.25, amount: 36956.40, status: "future", date: "", note: "retention — released at final/CofO" },
+];
+// [name, d1%, d2%, d3%, d4%, physical%]
+const WASH_TRADES_A = [["Demo",60,40,0,0,100],["Foundation",50,50,0,0,100],["Framing",30,70,0,0,90],["Windows",50,50,0,0,0],["Roofing",0,50,50,0,0],["Insulation",0,0,80,20,0],["Electrical",20,0,80,0,10],["Rough Plumbing",20,0,80,0,30],["HVAC",0,0,80,20,0],["Gas",20,0,80,0,0],["Tankless WH",0,0,0,100,0],["Drywall",0,0,90,10,0],["Wall Finish",0,0,60,40,0],["Stucco",0,40,60,0,0],["Interior Paint",0,0,0,100,0],["Exterior Paint",0,0,20,80,0],["Flooring",0,0,0,100,0],["Baseboard",0,0,0,100,0],["Doors",0,0,0,100,0],["Closet Shelving",0,0,0,100,0],["Kitchen",0,0,50,50,0],["Bathroom",0,0,60,40,0]];
+const WASH_TRADES_B = [["Demo",60,40,0,0,100],["Foundation",50,50,0,0,100],["Framing",30,70,0,0,100],["Windows",50,50,0,0,0],["Roofing",0,50,50,0,0],["Insulation",0,0,80,20,0],["Electrical",20,0,80,0,10],["Rough Plumbing",20,0,80,0,30],["HVAC",0,0,50,50,0],["Tankless WH",0,0,0,100,0],["Drywall",0,0,90,10,0],["Wall Finish",0,0,60,40,0],["Stucco",0,40,60,0,0],["Interior Paint",0,0,90,10,0],["Vinyl Flooring",0,0,0,100,0],["Doors",0,0,0,100,0],["Closet Shelving",0,0,0,100,0],["Kitchen Counter",0,0,0,100,0],["Kitchen Fixtures",0,0,50,50,0],["Kitchen Millwork",0,0,50,50,0],["Bathroom Tile",0,0,50,50,0],["Bathroom Fixtures",0,0,50,50,0],["Bathroom Vanities",0,0,0,100,0]];
+export async function applyWashingtonDraws() {
+  if (localStorage.getItem("sshcc:wash-draws-v1")) return;
+  const pid = "prop-washington";
+  const existingD = DB.getAll("draws");
+  for (const d of WASH_DRAWS) { if (existingD.some((x) => x.id === d.id)) continue; await DB.upsert("draws", { ...d, propertyId: pid }); }
+  const existingT = DB.getAll("trades");
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  for (const [contract, list] of [["A", WASH_TRADES_A], ["B", WASH_TRADES_B]]) {
+    for (const [name, d1, d2, d3, d4, physical] of list) {
+      const id = `tr-wash-${contract}-${slug(name)}`;
+      if (existingT.some((x) => x.id === id)) continue;
+      await DB.upsert("trades", { id, propertyId: pid, contract, name, d1, d2, d3, d4, physical, inspection: "" });
+    }
+  }
+  localStorage.setItem("sshcc:wash-draws-v1", "1");
+  console.log("Washington draws + trades seeded.");
+}
+
 // ── Vacancies ────────────────────────────────────────────────────────────────
 export async function applyVacancies() {
   if (localStorage.getItem("sshcc:vacancy-v1")) return;

@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -12,7 +12,7 @@ const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
   "habits", "habitLog", "goals", "books", "workouts", "academy", "vocab",
-  "quizLog", "cashEvents", "strLog",
+  "quizLog", "cashEvents", "strLog", "draws", "trades",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -1662,8 +1662,40 @@ VIEWS.builds = {
     root.querySelectorAll("[data-open-prop]").forEach((el) => el.addEventListener("click", () => { const v = el.dataset.openProp; selectedProp = v === "back" ? null : v; render(); }));
     root.querySelectorAll("[data-add-str]").forEach((el) => el.addEventListener("click", () => editStrEntry(null, el.dataset.addStr)));
     root.querySelectorAll("[data-edit-str]").forEach((el) => el.addEventListener("click", () => editStrEntry(el.dataset.editStr)));
+    root.querySelectorAll("[data-edit-draw]").forEach((el) => el.addEventListener("click", () => editDraw(el.dataset.editDraw)));
+    root.querySelectorAll("[data-edit-trade]").forEach((el) => el.addEventListener("click", () => editTrade(el.dataset.editTrade)));
+    root.querySelectorAll("[data-gate]").forEach((el) => el.addEventListener("click", () => {
+      const [did, idx] = el.dataset.gate.split(":"); const d = state.draws.find((x) => x.id === did); if (!d || !d.gate) return;
+      const gate = d.gate.map((g, i) => i === Number(idx) ? { ...g, done: !g.done } : g);
+      DB.upsert("draws", { ...d, gate });
+    }));
   },
 };
+function editDraw(id) {
+  const d = state.draws.find((x) => x.id === id); if (!d) return;
+  formModal({
+    title: `Draw ${d.num}`, sub: "Only mark paid once the draw's trades are physically in.",
+    fields: [
+      { key: "status", label: "Status", type: "select", options: [["future", "Future"], ["gated", "Gated (not payable)"], ["due", "Due now"], ["paid", "Paid"]] },
+      { key: "date", label: "Date paid / due", type: "date" },
+      { key: "amount", label: "Amount (combined, net) $", type: "number" },
+    ],
+    values: d,
+    onSubmit: (v) => { DB.upsert("draws", { ...d, status: v.status, date: v.date, amount: Number(v.amount) || d.amount }); toast("Draw updated"); },
+  });
+}
+function editTrade(id) {
+  const t = state.trades.find((x) => x.id === id); if (!t) return;
+  formModal({
+    title: `${t.name} · Contract ${t.contract}`, sub: "Log physical % complete. Anything billed above this flags as ahead-billed.",
+    fields: [
+      { key: "physical", label: "Physical % complete", type: "number" },
+      { key: "inspection", label: "Inspection status (e.g. passed / scheduled)" },
+    ],
+    values: t,
+    onSubmit: (v) => { DB.upsert("trades", { ...t, physical: Number(v.physical) || 0, inspection: v.inspection || "" }); toast("Trade updated"); },
+  });
+}
 function editStrEntry(id, propId) {
   const e = id ? state.strLog.find((x) => x.id === id) : null;
   formModal({
@@ -1826,6 +1858,38 @@ function statusBar(sc) {
     <div class="mono muted" style="font-size:9px;margin-top:6px">${esc(readout)}</div>`;
 }
 
+// ── Construction draws + trade-billing (overbilling engine) ──────────────────
+function drawsFor(pid) { return (state.draws || []).filter((d) => d.propertyId === pid).sort((a, b) => a.num - b.num); }
+function tradesFor(pid) { return (state.trades || []).filter((t) => t.propertyId === pid); }
+function paidDrawNums(pid) { return new Set(drawsFor(pid).filter((d) => d.status === "paid").map((d) => d.num)); }
+function tradeCumBilled(t, paid) { let s = 0; if (paid.has(1)) s += t.d1 || 0; if (paid.has(2)) s += t.d2 || 0; if (paid.has(3)) s += t.d3 || 0; if (paid.has(4)) s += t.d4 || 0; return s; }
+function constructionSection(p) {
+  const draws = drawsFor(p.id);
+  if (!draws.length) return "";
+  const trades = tradesFor(p.id), paid = paidDrawNums(p.id);
+  const totalContract = draws.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const paidTotal = draws.filter((d) => d.status === "paid").reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const nextDraw = draws.find((d) => d.status !== "paid");
+  const ahead = trades.map((t) => ({ t, cum: tradeCumBilled(t, paid) })).map((x) => ({ ...x, v: x.cum - (Number(x.t.physical) || 0) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+  const dPill = (d) => d.status === "paid" ? `<span class="tag green">paid</span>` : d.status === "gated" ? `<span class="tag amber">gated</span>` : d.status === "due" ? `<span class="tag amber">due</span>` : `<span class="tag">future</span>`;
+  return `
+    <div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:14px">🏗 CONSTRUCTION DRAWS &amp; BILLING</div>
+    <div class="mono muted" style="font-size:10.5px;margin:2px 0 6px">Paid ${money0(paidTotal)} of ${money0(totalContract)} · 10% retention held to Draw 5</div>
+    ${draws.map((d) => `<div class="row" data-edit-draw="${d.id}" style="cursor:pointer;padding:5px 8px">
+      <div class="body"><div class="t" style="font-size:12.5px">Draw ${d.num}${d.note ? ` <span class="muted" style="font-size:10px">${esc(d.note)}</span>` : ""}</div>
+        <div class="m">${dPill(d)}${d.date ? `<span class="mono muted">${fmtDate(d.date)}</span>` : ""}${d.gate ? `<span class="mono muted">${d.gate.filter((g) => g.done).length}/${d.gate.length} gate</span>` : ""}</div></div>
+      <div class="mono" style="font-weight:700;flex:0 0 auto">${money0(d.amount)}</div></div>`).join("")}
+    ${nextDraw ? `<div style="margin-top:8px;padding:10px;border:1px solid var(--amber-line);border-radius:9px;background:var(--amber-soft)">
+      <div style="font-weight:800;font-size:12.5px">🔒 Next: Draw ${nextDraw.num} — ${money0(nextDraw.amount)}${nextDraw.gate ? ` · ${nextDraw.gate.filter((g) => g.done).length}/${nextDraw.gate.length} gate` : ""}</div>
+      ${nextDraw.gate ? `<div style="margin-top:5px">${nextDraw.gate.map((g, i) => `<div data-gate="${nextDraw.id}:${i}" style="cursor:pointer;font-size:11.5px;padding:3px 0;display:flex;gap:7px;align-items:center"><span style="width:15px;flex:0 0 auto">${g.done ? "✅" : "⬜"}</span><span style="${g.done ? "text-decoration:line-through;opacity:.55" : ""}">${esc(g.t)}</span></div>`).join("")}</div>` : ""}</div>` : ""}
+    ${ahead.length ? `<div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:10px">🔴 AHEAD-BILLED — paid, not in the field</div>
+      ${ahead.map((x) => `<div class="row" data-edit-trade="${x.t.id}" style="cursor:pointer;padding:4px 8px"><div class="body"><div class="t" style="font-size:12px">${esc(x.t.name)} <span class="muted" style="font-size:10px">${x.t.contract}</span></div><div class="m mono" style="color:#dc5050">billed ${x.cum}% · in field ${x.t.physical || 0}%</div></div><div class="mono" style="color:#dc5050;font-weight:800">+${x.v}%</div></div>`).join("")}`
+      : `<div class="mono" style="font-size:11px;margin-top:8px;color:#28b478">✅ Nothing billed ahead of the field.</div>`}
+    <details style="margin-top:8px"><summary class="muted" style="cursor:pointer;font-size:11px">▾ All ${trades.length} trades — tap to log physical %</summary>
+      <div class="mt">${trades.map((t) => { const cum = tradeCumBilled(t, paid), v = cum - (Number(t.physical) || 0); return `<div class="row" data-edit-trade="${t.id}" style="cursor:pointer;padding:3px 8px"><div class="body"><div class="t" style="font-size:11.5px">${esc(t.name)} <span class="muted">${t.contract}</span></div></div><div class="mono muted" style="font-size:10.5px">billed ${cum}% · in ${t.physical || 0}%${v > 0 ? ` <span style="color:#dc5050">+${v}</span>` : ""}</div></div>`; }).join("")}</div>
+    </details>`;
+}
+
 function projectCard(p) {
   const sc = scheduleMetrics(p);
   const c = permitStatus(p);
@@ -1878,6 +1942,8 @@ function projectCard(p) {
         <button class="btn sm mt" data-add-str="${p.id}">+ Log a month</button>`; })() : ""}
     ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
     ${costBreakdown(b)}
+
+    ${constructionSection(p)}
 
     <details style="margin-top:10px">
       <summary class="muted" style="cursor:pointer;font-size:12px">▾ Full timeline, budget, returns &amp; tasks</summary>
@@ -3263,6 +3329,7 @@ async function boot() {
   try { await applyBroadwayAirbnb(); } catch (e) { console.warn("broadway str skipped", e); }
   try { await applyBroadwayAirbnbV2(); } catch (e) { console.warn("broadway str v2 skipped", e); }
   try { await applyStrSeed(); } catch (e) { console.warn("str seed skipped", e); }
+  try { await applyWashingtonDraws(); } catch (e) { console.warn("wash draws skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
