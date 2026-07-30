@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -1850,6 +1850,7 @@ function projectCard(p) {
 
     <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
     ${Number(p.vacantUnits) ? `<div style="margin-top:8px;font-size:12px;color:#e0913a;font-weight:600">🔑 ${p.vacantUnits} vacant${p.vacantNote ? ` (${esc(p.vacantNote)})` : ""} — +${money0(Number(p.vacantRent) || 0)}/mo when filled</div>` : ""}
+    ${p.strUnit ? `<div style="margin-top:8px;font-size:11.5px;color:#7aa2f7">🏨 ${esc(p.strNote || "Short-term rental unit")}</div>` : ""}
     ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
     ${costBreakdown(b)}
 
@@ -3220,6 +3221,7 @@ async function boot() {
   try { await applyFinancials(); } catch (e) { console.warn("financials load skipped", e); }
   try { await applyFinancialsV2(); } catch (e) { console.warn("financials v2 skipped", e); }
   try { await applyVacancies(); } catch (e) { console.warn("vacancy load skipped", e); }
+  try { await applyBroadwayAirbnb(); } catch (e) { console.warn("broadway str skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }

@@ -448,6 +448,24 @@ export async function applyFinancialsV2() {
   console.log("Financials v2 applied (Burke swap, cash-in, removals, mgmt fee).");
 }
 
+// ── Broadway Airbnb unit → model at long-term equivalent ─────────────────────
+// The unit is run as a short-term rental (blended ~$4,245) but its stable
+// long-term value is $3,445 (net ~$743/mo). Per the owner's own data the STR
+// underperforms a long-term tenant by ~$12,270 over May–Dec, so True Net uses
+// the conservative long-term figure (13,180 → 12,380) and flags the decision.
+export async function applyBroadwayAirbnb() {
+  if (localStorage.getItem("sshcc:broadway-str-v1")) return;
+  const props = DB.getAll("properties");
+  const b = props.find((x) => x.id === "prop-broadway");
+  if (b) await DB.upsert("properties", { ...b, grossRent: 12380, strUnit: true, strNote: "1 unit run as Airbnb — modeled at long-term equiv $3,445/mo (net ~$743). STR is seasonal and has underperformed long-term ~$12,270 over May–Dec." });
+  const tasks = DB.getAll("tasks");
+  if (!tasks.some((t) => t.id === "tk-broadway-str")) {
+    await DB.upsert("tasks", { id: "tk-broadway-str", title: "Decide: convert Broadway Airbnb unit to long-term ($3,445, +$743/mo stable)", status: "open", priority: 1, propertyId: "prop-broadway", due: "", tags: ["decision"] });
+  }
+  localStorage.setItem("sshcc:broadway-str-v1", "1");
+  console.log("Broadway STR modeled at long-term equivalent.");
+}
+
 // ── Vacancies ────────────────────────────────────────────────────────────────
 export async function applyVacancies() {
   if (localStorage.getItem("sshcc:vacancy-v1")) return;
