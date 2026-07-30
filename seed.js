@@ -379,3 +379,41 @@ export async function applyCashSeed() {
   localStorage.setItem("sshcc:cash-v1", "1");
   console.log("Cash schedule seeded.");
 }
+
+// ── Real financials from the master portfolio sheet (Jul 2026) ───────────────
+// grossRent = gross rent/mo · loanPayment = mortgage P&I/mo · monthlyExpenses =
+// operating-only (sheet "Total Expenses" MINUS mortgage), so True Net = rent −
+// expenses − mortgage ties to the sheet. cashInvested omitted where the sheet
+// shows placeholder values.
+const FINANCIALS = [
+  { id: "prop-burke-11544", units: 3, grossRent: 8495, loanPayment: 5065, monthlyExpenses: 1311, purchasePrice: 600183, currentValue: 1130000, loanBalance: 791000, cashInvested: 307286, interestRate: 6.625, zoning: "R2", grade: "A", verdict: "Keep", devPlan: "Maxed out" },
+  { id: "prop-burke-11550", units: 3, grossRent: 11150, loanPayment: 7171, monthlyExpenses: 1742, purchasePrice: 849817, currentValue: 1600000, loanBalance: 1120000, cashInvested: 208714, interestRate: 6.625, zoning: "R2", grade: "A", verdict: "Keep", devPlan: "Maxed out" },
+  { id: "prop-washington", units: 2, grossRent: 4500, loanPayment: 5105, monthlyExpenses: 1003, purchasePrice: 940000, currentValue: 1139000, loanBalance: 797300, cashInvested: 88200, interestRate: 6.625, zoning: "R1", grade: "A+", verdict: "Anchor", devPlan: "749 sqft ADU + 180 sqft addition" },
+  { id: "prop-broadway", units: 4, grossRent: 13180, loanPayment: 9446, monthlyExpenses: 1549, purchasePrice: 1350000, currentValue: 2107500, loanBalance: 1475250, cashInvested: -190960, interestRate: 6.625, zoning: "R2", grade: "A+", verdict: "Anchor", devPlan: "None — infinite return" },
+  { id: "prop-fidel", units: 3, grossRent: 10595, loanPayment: 6723, monthlyExpenses: 1333, purchasePrice: 1050000, currentValue: 1519000, loanBalance: 1063300, cashInvested: 162000, interestRate: 6.625, zoning: "R3", grade: "A+", verdict: "Anchor", devPlan: "R3 development potential" },
+  { id: "prop-woodruff-nance", units: 4, grossRent: 12795, loanPayment: 7998, monthlyExpenses: 2433, purchasePrice: 1775000, currentValue: 1784500, loanBalance: 1249150, cashInvested: 440484, interestRate: 6.625, zoning: "R3", grade: "A", verdict: "Keep", devPlan: "R3 development potential" },
+  { id: "prop-muller", units: 4, grossRent: 13020, loanPayment: 9466, monthlyExpenses: 2527, purchasePrice: 1650000, currentValue: 2112000, loanBalance: 1478400, cashInvested: 96600, interestRate: 6.625, zoning: "R2", grade: "A", verdict: "Keep", devPlan: "2 JADUs planned" },
+  { id: "prop-tweedy", units: 3, grossRent: 10337, loanPayment: 7025, monthlyExpenses: 2028, purchasePrice: 1450000, currentValue: 1567500, loanBalance: 1097250, cashInvested: 517749, interestRate: 6.625, zoning: "R3", grade: "B", verdict: "Watch", devPlan: "R3 development potential" },
+  { id: "prop-spry", units: 2, grossRent: 5520, loanPayment: 4693, monthlyExpenses: 1123, purchasePrice: 750000, currentValue: 1047000, loanBalance: 732900, cashInvested: -61400, interestRate: 6.625, zoning: "R1", grade: "D", verdict: "Watch", devPlan: "749 sqft 2x2 ADU — plans in progress" },
+  { id: "prop-firvale", units: 1, grossRent: 0, loanPayment: 1976, monthlyExpenses: 0, purchasePrice: 300000, currentValue: 550000, loanBalance: 300000, cashInvested: 300000, interestRate: 6.9, zoning: "Condo", grade: "A", verdict: "Fix & Flip", devPlan: "Fix & flip — remodel in progress" },
+  { id: "prop-140-12th", units: 3, grossRent: 10800, loanPayment: 14411, monthlyExpenses: 3043, purchasePrice: 2925000, currentValue: 3100000, loanBalance: 2193750, interestRate: 6.875, devPlan: "Seal Beach ADU" },
+  { id: "prop-painter-11912", units: 3, grossRent: 3243, loanPayment: 5365, monthlyExpenses: 1510, purchasePrice: 1090000, currentValue: 1194000, loanBalance: 816750, interestRate: 6.875, devPlan: "GC-managed" },
+  { id: "prop-arrington-10522", units: 4, grossRent: 6250, loanPayment: 5604, monthlyExpenses: 2193, purchasePrice: 1137500, currentValue: 1269000, loanBalance: 853125, interestRate: 6.875, devPlan: "ADU planning" },
+  { id: "prop-arrington-10516", units: 4, grossRent: 5375, loanPayment: 5506, monthlyExpenses: 2098, purchasePrice: 1117500, currentValue: 1286000, loanBalance: 838125, interestRate: 6.875, devPlan: "ADU planning" },
+  { id: "prop-inglewood", units: 4, grossRent: 0, loanPayment: 5405, monthlyExpenses: 1461, purchasePrice: 1065000, currentValue: 1065000, loanBalance: 0, interestRate: 6.09, devPlan: "Underwrite + ADU" },
+];
+export async function applyFinancials() {
+  if (localStorage.getItem("sshcc:financials-v1")) return;
+  const props = DB.getAll("properties");
+  if (!props.length) return;
+  let n = 0;
+  for (const f of FINANCIALS) {
+    const p = props.find((x) => x.id === f.id);
+    if (!p) continue;
+    const { id, ...fields } = f;
+    await DB.upsert("properties", { ...p, ...fields });
+    n++;
+  }
+  localStorage.setItem("sshcc:financials-v1", "1");
+  console.log(`Financials loaded for ${n} properties.`);
+}
