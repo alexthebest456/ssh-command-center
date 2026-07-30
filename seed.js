@@ -535,6 +535,18 @@ export async function applyWashingtonDraws() {
   console.log("Washington draws + trades seeded.");
 }
 
+// ── Washington schedule dates ────────────────────────────────────────────────
+// Effective working timeline (pause Feb 26–Jul 16 excluded): start anchored so
+// the 31 pre-pause working days are baked in, finish = the late-Sept forecast.
+export async function applyWashingtonDates() {
+  if (localStorage.getItem("sshcc:wash-dates-v1")) return;
+  const props = DB.getAll("properties");
+  const w = props.find((x) => x.id === "prop-washington");
+  if (w) await DB.upsert("properties", { ...w, startDate: "2026-06-15", targetDate: "2026-09-30" });
+  localStorage.setItem("sshcc:wash-dates-v1", "1");
+  console.log("Washington schedule dates set.");
+}
+
 // ── Vacancies ────────────────────────────────────────────────────────────────
 export async function applyVacancies() {
   if (localStorage.getItem("sshcc:vacancy-v1")) return;
