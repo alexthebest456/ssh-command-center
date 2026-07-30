@@ -466,6 +466,19 @@ export async function applyBroadwayAirbnb() {
   console.log("Broadway STR modeled at long-term equivalent.");
 }
 
+// ── Broadway STR reframe (v2): model the floor, track upside ─────────────────
+export async function applyBroadwayAirbnbV2() {
+  if (localStorage.getItem("sshcc:broadway-str-v2")) return;
+  const props = DB.getAll("properties");
+  const b = props.find((x) => x.id === "prop-broadway");
+  if (b) await DB.upsert("properties", { ...b, grossRent: 12380, strUnit: true, strNote: "1 unit run as Airbnb — modeled at the long-term floor $3,445/mo (net ~$743) since upcoming months aren't booked yet. Summer bookings run well above this; log actual STR income to capture the upside." });
+  const tasks = DB.getAll("tasks");
+  const t = tasks.find((x) => x.id === "tk-broadway-str");
+  if (t) await DB.upsert("tasks", { ...t, title: "Log Broadway Airbnb income monthly — track STR upside vs the $3,445 long-term floor", priority: 1 });
+  localStorage.setItem("sshcc:broadway-str-v2", "1");
+  console.log("Broadway STR reframed to floor + upside.");
+}
+
 // ── Vacancies ────────────────────────────────────────────────────────────────
 export async function applyVacancies() {
   if (localStorage.getItem("sshcc:vacancy-v1")) return;
