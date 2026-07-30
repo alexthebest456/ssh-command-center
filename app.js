@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -12,7 +12,7 @@ const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
   "habits", "habitLog", "goals", "books", "workouts", "academy", "vocab",
-  "quizLog", "cashEvents",
+  "quizLog", "cashEvents", "strLog",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -1660,8 +1660,26 @@ VIEWS.builds = {
     root.querySelectorAll("[data-add-build-task]").forEach((el) => el.addEventListener("click", () => quickTaskFor(el.dataset.addBuildTask)));
     root.querySelectorAll("[data-proj-filter]").forEach((el) => el.addEventListener("click", () => { const v = el.dataset.projFilter; projFilter = v === "clear" ? null : (projFilter === v ? null : v); selectedProp = null; render(); }));
     root.querySelectorAll("[data-open-prop]").forEach((el) => el.addEventListener("click", () => { const v = el.dataset.openProp; selectedProp = v === "back" ? null : v; render(); }));
+    root.querySelectorAll("[data-add-str]").forEach((el) => el.addEventListener("click", () => editStrEntry(null, el.dataset.addStr)));
+    root.querySelectorAll("[data-edit-str]").forEach((el) => el.addEventListener("click", () => editStrEntry(el.dataset.editStr)));
   },
 };
+function editStrEntry(id, propId) {
+  const e = id ? state.strLog.find((x) => x.id === id) : null;
+  formModal({
+    title: e ? "Edit Airbnb month" : "Log Airbnb month",
+    sub: "Net = income − monthly expense − cleaning. Anything above the long-term floor is upside.",
+    fields: [
+      { key: "month", label: "Month (YYYY-MM)" },
+      { key: "income", label: "Airbnb income ($)", type: "number" },
+      { key: "cleaning", label: "Cleaning cost ($)", type: "number" },
+      { key: "bookings", label: "Bookings (count)", type: "number" },
+    ],
+    values: e || { month: todayISO().slice(0, 7) },
+    onSubmit: (v) => { DB.upsert("strLog", { ...(e || { id: undefined }), propertyId: (e && e.propertyId) || propId, month: v.month, income: Number(v.income) || 0, cleaning: Number(v.cleaning) || 0, bookings: Number(v.bookings) || 0 }); toast("Logged"); },
+    onDelete: e ? () => DB.remove("strLog", e.id) : null,
+  });
+}
 
 // Deal economics — the investor-facing returns, computed from entered numbers.
 function dealMetrics(p) {
@@ -1851,6 +1869,13 @@ function projectCard(p) {
     <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
     ${Number(p.vacantUnits) ? `<div style="margin-top:8px;font-size:12px;color:#e0913a;font-weight:600">🔑 ${p.vacantUnits} vacant${p.vacantNote ? ` (${esc(p.vacantNote)})` : ""} — +${money0(Number(p.vacantRent) || 0)}/mo when filled</div>` : ""}
     ${p.strUnit ? `<div style="margin-top:8px;font-size:11.5px;color:#7aa2f7">🏨 ${esc(p.strNote || "Short-term rental unit")}</div>` : ""}
+    ${p.strUnit ? (() => { const ms = strMonths(p.id), floor = Number(p.strFloorNet) || 0; const totNet = ms.reduce((a, m) => a + m.net, 0), totUp = ms.reduce((a, m) => a + m.upside, 0);
+      return `<div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:12px">AIRBNB LOG — floor ${money0(floor)}/mo long-term</div>
+        <div style="margin-top:4px">${ms.length ? ms.map((m) => `<div class="row" data-edit-str="${m.id}" style="cursor:pointer;padding:5px 8px">
+          <div class="body"><div class="t" style="font-size:12px">${strMonthName(m.month)} · ${m.bookings || 0} booking${m.bookings === 1 ? "" : "s"}</div><div class="m"><span class="mono">${money0(m.income)} in · ${money0(m.cleaning)} clean</span></div></div>
+          <div style="text-align:right;flex:0 0 auto"><div class="mono" style="font-weight:700;color:${m.net >= 0 ? "#28b478" : "#dc5050"}">${m.net < 0 ? "−" : ""}${money0(Math.abs(m.net))}</div><div class="mono" style="font-size:9px;color:${m.upside >= 0 ? "#28b478" : "#dc5050"}">${m.upside >= 0 ? "+" : "−"}${money0(Math.abs(m.upside))} vs floor</div></div></div>`).join("") : `<div class="empty" style="padding:8px">No months logged.</div>`}</div>
+        <div class="flex between mono" style="font-size:11px;margin-top:6px;font-weight:700;padding:0 8px"><span>Season so far</span><span>${totNet < 0 ? "−" : ""}${money0(Math.abs(totNet))} net · <span style="color:${totUp >= 0 ? "#28b478" : "#dc5050"}">${totUp >= 0 ? "+" : "−"}${money0(Math.abs(totUp))} vs floor</span></span></div>
+        <button class="btn sm mt" data-add-str="${p.id}">+ Log a month</button>`; })() : ""}
     ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
     ${costBreakdown(b)}
 
@@ -2318,6 +2343,13 @@ function portfolioRent() { return state.leases.reduce((a, l) => a + (Number(l.cu
 function currentDoors() { return state.properties.reduce((a, p) => a + (Number(p.units) || 0), 0); }
 function mgmtFee() { const m = state.meta.find((x) => x.id === "mgmtFee"); return m ? Number(m.amount) || 0 : 0; }
 function portfolioVacancy() { return state.properties.reduce((a, p) => ({ units: a.units + (Number(p.vacantUnits) || 0), rent: a.rent + (Number(p.vacantRent) || 0) }), { units: 0, rent: 0 }); }
+function strMonthName(ym) { const d = parseISO((ym || "") + "-01"); return d ? d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }) : (ym || ""); }
+function strMonths(propId) {
+  const p = state.properties.find((x) => x.id === propId) || {};
+  const exp = Number(p.strMonthlyExp) || 0, floor = Number(p.strFloorNet) || 0;
+  return (state.strLog || []).filter((e) => e.propertyId === propId).sort((a, b) => (a.month || "").localeCompare(b.month || ""))
+    .map((e) => { const net = (Number(e.income) || 0) - exp - (Number(e.cleaning) || 0); return { ...e, net, upside: net - floor, floor }; });
+}
 // Live "true net" — collected rent (from active leases) minus operating expenses
 // and debt service across the whole portfolio. Recomputes on every data change,
 // so acquisitions and move-ins/move-outs update it instantly.
@@ -3223,6 +3255,7 @@ async function boot() {
   try { await applyVacancies(); } catch (e) { console.warn("vacancy load skipped", e); }
   try { await applyBroadwayAirbnb(); } catch (e) { console.warn("broadway str skipped", e); }
   try { await applyBroadwayAirbnbV2(); } catch (e) { console.warn("broadway str v2 skipped", e); }
+  try { await applyStrSeed(); } catch (e) { console.warn("str seed skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }

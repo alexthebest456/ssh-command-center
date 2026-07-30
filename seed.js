@@ -479,6 +479,32 @@ export async function applyBroadwayAirbnbV2() {
   console.log("Broadway STR reframed to floor + upside.");
 }
 
+// ── STR (Airbnb) log seed — Broadway's actual months so far ──────────────────
+const STR_MONTHS = [
+  { m: "2026-05", income: 3200, cleaning: 875, bookings: 5 },
+  { m: "2026-06", income: 8731.94, cleaning: 1050, bookings: 6 },
+  { m: "2026-07", income: 11618.48, cleaning: 1050, bookings: 6 },
+  { m: "2026-08", income: 861.36, cleaning: 350, bookings: 2 },
+  { m: "2026-09", income: 822.56, cleaning: 175, bookings: 1 },
+  { m: "2026-10", income: 2895.45, cleaning: 700, bookings: 4 },
+  { m: "2026-11", income: 2895.45, cleaning: 350, bookings: 2 },
+  { m: "2026-12", income: 0, cleaning: 0, bookings: 0 },
+];
+export async function applyStrSeed() {
+  if (localStorage.getItem("sshcc:str-v1")) return;
+  const props = DB.getAll("properties");
+  const b = props.find((x) => x.id === "prop-broadway");
+  if (b) await DB.upsert("properties", { ...b, strMonthlyExp: 4100, strFloorNet: 743 });
+  const log = DB.getAll("strLog");
+  for (const s of STR_MONTHS) {
+    const id = "str-broadway-" + s.m;
+    if (log.some((x) => x.id === id)) continue;
+    await DB.upsert("strLog", { id, propertyId: "prop-broadway", month: s.m, income: s.income, cleaning: s.cleaning, bookings: s.bookings });
+  }
+  localStorage.setItem("sshcc:str-v1", "1");
+  console.log("STR log seeded.");
+}
+
 // ── Vacancies ────────────────────────────────────────────────────────────────
 export async function applyVacancies() {
   if (localStorage.getItem("sshcc:vacancy-v1")) return;
