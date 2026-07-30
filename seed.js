@@ -417,3 +417,33 @@ export async function applyFinancials() {
   localStorage.setItem("sshcc:financials-v1", "1");
   console.log(`Financials loaded for ${n} properties.`);
 }
+
+// ── Financials corrections (v2) ──────────────────────────────────────────────
+// - Burke Old is 11550, Burke New is 11544 (swap what v1 loaded).
+// - Real cash-in: Painter/12th/Arrington = 25% down; Inglewood = full price on LOC.
+// - Remove properties that shouldn't count: Gramercy & Dinsdale (sold), Crestview
+//   (parents' primary residence), SSH Corporate (DoorLoop placeholder).
+// - Store the $7k/mo management fee (Dad → Alex) for the investor view.
+const FIN_V2 = [
+  // Burke Old numbers → 11550
+  { id: "prop-burke-11550", units: 3, grossRent: 8495, loanPayment: 5065, monthlyExpenses: 1311, purchasePrice: 600183, currentValue: 1130000, loanBalance: 791000, cashInvested: 307286, zoning: "R2", grade: "A", verdict: "Keep", devPlan: "Maxed out" },
+  // Burke New numbers → 11544
+  { id: "prop-burke-11544", units: 3, grossRent: 11150, loanPayment: 7171, monthlyExpenses: 1742, purchasePrice: 849817, currentValue: 1600000, loanBalance: 1120000, cashInvested: 208714, zoning: "R2", grade: "A", verdict: "Keep", devPlan: "Maxed out" },
+  // Real cash-in (25% down / LOC)
+  { id: "prop-painter-11912", cashInvested: 272500 },
+  { id: "prop-140-12th", cashInvested: 731250 },
+  { id: "prop-arrington-10522", cashInvested: 284375 },
+  { id: "prop-arrington-10516", cashInvested: 279375 },
+  { id: "prop-inglewood", cashInvested: 1065000, locFunded: true },
+];
+const FIN_V2_REMOVE = ["prop-gramercy", "prop-dinsdale", "prop-crestview", "prop-ssh-corporate"];
+export async function applyFinancialsV2() {
+  if (localStorage.getItem("sshcc:financials-v2")) return;
+  const props = DB.getAll("properties");
+  if (!props.length) return;
+  for (const u of FIN_V2) { const p = props.find((x) => x.id === u.id); if (!p) continue; const { id, ...f } = u; await DB.upsert("properties", { ...p, ...f }); }
+  for (const id of FIN_V2_REMOVE) { if (props.some((x) => x.id === id)) await DB.remove("properties", id); }
+  await DB.upsert("meta", { id: "mgmtFee", amount: 7000 });
+  localStorage.setItem("sshcc:financials-v2", "1");
+  console.log("Financials v2 applied (Burke swap, cash-in, removals, mgmt fee).");
+}

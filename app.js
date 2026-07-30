@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -768,6 +768,7 @@ VIEWS.investor = {
     const cash = cashSchedule();
     const upcOut = cash.rows.filter((r) => cashSigned(r.e) < 0 && r.e.status !== "done").slice(0, 6);
     const progressOf = (p) => { const sc = scOf(p); return Math.round((sc.idx / Math.max(1, sc.n - 1)) * 100); };
+    const mgmt = mgmtFee(), total = n.net - mgmt;
     return `
     <div class="view">
       <div class="view-head"><div><div class="eyebrow">SSH Development · Investor</div><h1>Overview</h1></div>
@@ -778,8 +779,16 @@ VIEWS.investor = {
         <div class="muted" style="font-size:12px;margin-top:2px">${builds.length} active build${builds.length !== 1 ? "s" : ""} · ${onT} on schedule${beh ? ` · ${beh} behind` : ""}</div>
       </div>
 
+      <div class="panel mb">
+        <div class="panel-title"><span class="n">💰</span> Monthly Net</div>
+        <div class="flex between" style="padding:5px 0;font-size:13.5px"><span>Net from properties</span><span class="mono" style="font-weight:700;color:${n.net >= 0 ? "#28b478" : "#dc5050"}">${n.net < 0 ? "−" : ""}${money0(Math.abs(n.net))}</span></div>
+        <div class="flex between" style="padding:5px 0;font-size:13.5px;border-top:1px dashed var(--line)"><span>Management (Alex)</span><span class="mono" style="font-weight:700;color:#dc5050">−${money0(mgmt)}</span></div>
+        <div class="flex between" style="padding:7px 0;border-top:1px solid var(--line);font-size:15px;font-weight:800"><span>Total net / mo</span><span class="mono" style="color:${total >= 0 ? "#28b478" : "#dc5050"}">${total < 0 ? "−" : ""}${money0(Math.abs(total))}</span></div>
+        <div class="mono muted" style="font-size:10.5px;margin-top:4px">${money0(total * 12)}/yr · properties are cash-negative while ${builds.length} value-add projects are mid-build; flips positive as ADUs & refis complete.</div>
+      </div>
+
       <div class="grid cols-3 mb">
-        <div class="stat"><div class="k">True Net / mo</div><div class="v ${n.net >= 0 ? "green" : "red"}" style="font-size:22px">${money0(n.net)}</div><div class="sub">${money0(n.net * 12)}/yr</div></div>
+        <div class="stat"><div class="k">Property Net / mo</div><div class="v ${n.net >= 0 ? "green" : "red"}" style="font-size:20px">${n.net < 0 ? "−" : ""}${money0(Math.abs(n.net))}</div><div class="sub">before mgmt</div></div>
         <div class="stat"><div class="k">Occupancy</div><div class="v ${n.occPct >= 90 ? "green" : "amber"}">${n.occPct}%</div><div class="sub">${n.occupied}/${n.doors} units</div></div>
         <div class="stat"><div class="k">Cash After Plans</div><div class="v ${cash.end >= 0 ? "green" : "red"}" style="font-size:20px">${money0(cash.end)}</div><div class="sub">low ${money0(cash.low.bal)}</div></div>
       </div>
@@ -2304,6 +2313,7 @@ function getAssumptions() {
 function propMonthlyRent(pid) { return state.leases.filter((l) => l.propertyId === pid).reduce((a, l) => a + (Number(l.currentRent) || 0), 0); }
 function portfolioRent() { return state.leases.reduce((a, l) => a + (Number(l.currentRent) || 0), 0); }
 function currentDoors() { return state.properties.reduce((a, p) => a + (Number(p.units) || 0), 0); }
+function mgmtFee() { const m = state.meta.find((x) => x.id === "mgmtFee"); return m ? Number(m.amount) || 0 : 0; }
 // Live "true net" — collected rent (from active leases) minus operating expenses
 // and debt service across the whole portfolio. Recomputes on every data change,
 // so acquisitions and move-ins/move-outs update it instantly.
@@ -3200,6 +3210,7 @@ async function boot() {
   try { await applyExecSetup(); } catch (e) { console.warn("exec setup skipped", e); }
   try { await applyCashSeed(); } catch (e) { console.warn("cash seed skipped", e); }
   try { await applyFinancials(); } catch (e) { console.warn("financials load skipped", e); }
+  try { await applyFinancialsV2(); } catch (e) { console.warn("financials v2 skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
