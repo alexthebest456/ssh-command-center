@@ -447,3 +447,17 @@ export async function applyFinancialsV2() {
   localStorage.setItem("sshcc:financials-v2", "1");
   console.log("Financials v2 applied (Burke swap, cash-in, removals, mgmt fee).");
 }
+
+// ── Vacancies ────────────────────────────────────────────────────────────────
+export async function applyVacancies() {
+  if (localStorage.getItem("sshcc:vacancy-v1")) return;
+  const props = DB.getAll("properties");
+  const w = props.find((x) => x.id === "prop-washington");
+  if (w) await DB.upsert("properties", { ...w, vacantUnits: 1, vacantRent: 3200, vacantNote: "Unit 10030" });
+  const tasks = DB.getAll("tasks");
+  if (!tasks.some((t) => t.id === "tk-washington-vacancy")) {
+    await DB.upsert("tasks", { id: "tk-washington-vacancy", title: "Fill Washington vacancy — Unit 10030 ($3,200/mo)", status: "open", priority: 2, propertyId: "prop-washington", due: "", tags: ["leasing"] });
+  }
+  localStorage.setItem("sshcc:vacancy-v1", "1");
+  console.log("Vacancy loaded.");
+}

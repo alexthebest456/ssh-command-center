@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -784,12 +784,13 @@ VIEWS.investor = {
         <div class="flex between" style="padding:5px 0;font-size:13.5px"><span>Net from properties</span><span class="mono" style="font-weight:700;color:${n.net >= 0 ? "#28b478" : "#dc5050"}">${n.net < 0 ? "−" : ""}${money0(Math.abs(n.net))}</span></div>
         <div class="flex between" style="padding:5px 0;font-size:13.5px;border-top:1px dashed var(--line)"><span>Management (Alex)</span><span class="mono" style="font-weight:700;color:#dc5050">−${money0(mgmt)}</span></div>
         <div class="flex between" style="padding:7px 0;border-top:1px solid var(--line);font-size:15px;font-weight:800"><span>Total net / mo</span><span class="mono" style="color:${total >= 0 ? "#28b478" : "#dc5050"}">${total < 0 ? "−" : ""}${money0(Math.abs(total))}</span></div>
+        ${n.vacant ? `<div class="flex between" style="padding:5px 0;font-size:12.5px;color:#e0913a"><span>🔑 ${n.vacant} vacant unit${n.vacant > 1 ? "s" : ""} — fill for</span><span class="mono" style="font-weight:700">+${money0(n.vacantRent)}/mo</span></div>` : ""}
         <div class="mono muted" style="font-size:10.5px;margin-top:4px">${money0(total * 12)}/yr · properties are cash-negative while ${builds.length} value-add projects are mid-build; flips positive as ADUs & refis complete.</div>
       </div>
 
       <div class="grid cols-3 mb">
         <div class="stat"><div class="k">Property Net / mo</div><div class="v ${n.net >= 0 ? "green" : "red"}" style="font-size:20px">${n.net < 0 ? "−" : ""}${money0(Math.abs(n.net))}</div><div class="sub">before mgmt</div></div>
-        <div class="stat"><div class="k">Occupancy</div><div class="v ${n.occPct >= 90 ? "green" : "amber"}">${n.occPct}%</div><div class="sub">${n.occupied}/${n.doors} units</div></div>
+        <div class="stat"><div class="k">Occupancy</div><div class="v ${n.occPct >= 90 ? "green" : "amber"}">${n.occPct}%</div><div class="sub">${n.occupied}/${n.doors} units${n.vacant ? ` · ${n.vacant} vacant` : ""}</div></div>
         <div class="stat"><div class="k">Cash After Plans</div><div class="v ${cash.end >= 0 ? "green" : "red"}" style="font-size:20px">${money0(cash.end)}</div><div class="sub">low ${money0(cash.low.bal)}</div></div>
       </div>
 
@@ -1848,6 +1849,7 @@ function projectCard(p) {
     ${phaseScheduleList(sc, p)}
 
     <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
+    ${Number(p.vacantUnits) ? `<div style="margin-top:8px;font-size:12px;color:#e0913a;font-weight:600">🔑 ${p.vacantUnits} vacant${p.vacantNote ? ` (${esc(p.vacantNote)})` : ""} — +${money0(Number(p.vacantRent) || 0)}/mo when filled</div>` : ""}
     ${b.hasBudget ? budgetLine(b) : `<button class="btn sm ghost" data-edit-prop="${p.id}" style="margin-top:8px">+ Add budget</button>`}
     ${costBreakdown(b)}
 
@@ -2314,6 +2316,7 @@ function propMonthlyRent(pid) { return state.leases.filter((l) => l.propertyId =
 function portfolioRent() { return state.leases.reduce((a, l) => a + (Number(l.currentRent) || 0), 0); }
 function currentDoors() { return state.properties.reduce((a, p) => a + (Number(p.units) || 0), 0); }
 function mgmtFee() { const m = state.meta.find((x) => x.id === "mgmtFee"); return m ? Number(m.amount) || 0 : 0; }
+function portfolioVacancy() { return state.properties.reduce((a, p) => ({ units: a.units + (Number(p.vacantUnits) || 0), rent: a.rent + (Number(p.vacantRent) || 0) }), { units: 0, rent: 0 }); }
 // Live "true net" — collected rent (from active leases) minus operating expenses
 // and debt service across the whole portfolio. Recomputes on every data change,
 // so acquisitions and move-ins/move-outs update it instantly.
@@ -2331,8 +2334,10 @@ function portfolioNet() {
   const exp = state.properties.reduce((s, p) => s + effectiveExp(p), 0);
   const debt = state.properties.reduce((s, p) => s + (Number(p.loanPayment) || 0), 0);
   const doors = currentDoors();
-  const occupied = state.leases.length || state.properties.filter((p) => effectiveRent(p) > 0).reduce((a, p) => a + (Number(p.units) || 1), 0);
-  return { gross, exp, debt, net: gross - exp - debt, doors, occupied, vacant: Math.max(0, doors - occupied), occPct: doors ? Math.round(occupied / doors * 100) : 0 };
+  const totalVacant = state.properties.reduce((s, p) => s + (Number(p.vacantUnits) || 0), 0);
+  const occBase = state.leases.length || state.properties.filter((p) => effectiveRent(p) > 0).reduce((a, p) => a + (Number(p.units) || 1), 0);
+  const occupied = Math.max(0, occBase - totalVacant);
+  return { gross, exp, debt, net: gross - exp - debt, doors, occupied, vacant: totalVacant, vacantRent: state.properties.reduce((s, p) => s + (Number(p.vacantRent) || 0), 0), occPct: doors ? Math.round(occupied / doors * 100) : 0 };
 }
 
 function projectIncome(monthsAhead) {
@@ -2568,6 +2573,9 @@ function editFinancials(pid) {
     sub: `True net = rent − mortgage − expenses. Lease rent (${money0(propMonthlyRent(pid))}/mo) is used if present, otherwise the gross rent below.`,
     fields: [
       { key: "grossRent", label: "Gross rent ($/mo — if no leases entered)", type: "number" },
+      { key: "vacantUnits", label: "Vacant units (count)", type: "number" },
+      { key: "vacantRent", label: "Vacant units' market rent ($/mo when filled)", type: "number" },
+      { key: "vacantNote", label: "Vacancy note (e.g. Unit 10030)" },
       { key: "loanPayment", label: "Mortgage payment ($/mo, P&I)", type: "number" },
       { key: "taxMonthly", label: "Property tax ($/mo)", type: "number" },
       { key: "insuranceMonthly", label: "Insurance ($/mo)", type: "number" },
@@ -3211,6 +3219,7 @@ async function boot() {
   try { await applyCashSeed(); } catch (e) { console.warn("cash seed skipped", e); }
   try { await applyFinancials(); } catch (e) { console.warn("financials load skipped", e); }
   try { await applyFinancialsV2(); } catch (e) { console.warn("financials v2 skipped", e); }
+  try { await applyVacancies(); } catch (e) { console.warn("vacancy load skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
