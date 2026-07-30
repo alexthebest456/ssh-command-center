@@ -12,7 +12,7 @@ const COLLECTIONS = [
   "properties", "tasks", "content", "events", "leases",
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
   "habits", "habitLog", "goals", "books", "workouts", "academy", "vocab",
-  "quizLog", "cashEvents", "strLog", "draws", "trades",
+  "quizLog", "cashEvents", "strLog", "draws", "trades", "siteLog",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
@@ -1664,6 +1664,8 @@ VIEWS.builds = {
     root.querySelectorAll("[data-edit-str]").forEach((el) => el.addEventListener("click", () => editStrEntry(el.dataset.editStr)));
     root.querySelectorAll("[data-edit-draw]").forEach((el) => el.addEventListener("click", () => editDraw(el.dataset.editDraw)));
     root.querySelectorAll("[data-edit-trade]").forEach((el) => el.addEventListener("click", () => editTrade(el.dataset.editTrade)));
+    root.querySelectorAll("[data-add-question]").forEach((el) => el.addEventListener("click", () => addSiteQuestion(el.dataset.addQuestion)));
+    root.querySelectorAll("[data-resolve-q]").forEach((el) => el.addEventListener("click", () => { const q = state.siteLog.find((x) => x.id === el.dataset.resolveQ); if (q) { DB.upsert("siteLog", { ...q, status: "resolved" }); toast("Resolved ✓"); } }));
     root.querySelectorAll("[data-gate]").forEach((el) => el.addEventListener("click", () => {
       const [did, idx] = el.dataset.gate.split(":"); const d = state.draws.find((x) => x.id === did); if (!d || !d.gate) return;
       const gate = d.gate.map((g, i) => i === Number(idx) ? { ...g, done: !g.done } : g);
@@ -1671,6 +1673,18 @@ VIEWS.builds = {
     }));
   },
 };
+function addSiteQuestion(pid) {
+  formModal({
+    title: "Question / note",
+    sub: "Jot it on-site; it stays on this project until you resolve it.",
+    fields: [
+      { key: "text", label: "What to ask or note", type: "textarea" },
+      { key: "kind", label: "Type", type: "select", options: [["question", "❓ Question for GC"], ["note", "📝 Note"]] },
+    ],
+    values: { kind: "question" },
+    onSubmit: (v) => { if (!v.text) return; DB.upsert("siteLog", { id: undefined, propertyId: pid, text: v.text, kind: v.kind, status: "open", at: Date.now() }); toast("Logged"); },
+  });
+}
 function editDraw(id) {
   const d = state.draws.find((x) => x.id === id); if (!d) return;
   formModal({
@@ -1903,6 +1917,7 @@ function projectCard(p) {
   const nextStep = p.nextStep || (tasks[0] && tasks[0].title) || "Set the next step in Edit deal";
   const tgt = p.targetDate ? dueMeta(p.targetDate) : null;
   const cover = coverPhoto(p.id);
+  const qs = (state.siteLog || []).filter((x) => x.propertyId === p.id && x.status !== "resolved").sort((a, b) => (b.at || 0) - (a.at || 0));
   return `
   <div class="panel mb" style="padding:16px">
     ${cover ? `<div style="height:130px;border-radius:10px;overflow:hidden;margin-bottom:14px"><img src="${cover}" alt="" style="width:100%;height:100%;object-fit:cover"></div>` : ""}
@@ -1931,6 +1946,15 @@ function projectCard(p) {
     ${phaseScheduleList(sc, p)}
 
     <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
+
+    <div class="flex" style="gap:8px;margin-top:10px">
+      <label class="btn sm primary" style="cursor:pointer;flex:1;text-align:center">📷 Site photo<input type="file" accept="image/*" capture="environment" multiple class="hide" data-photo-input="${p.id}"></label>
+      <button class="btn sm" style="flex:1" data-add-question="${p.id}">❓ Question / note</button>
+    </div>
+    ${photos.length ? `<div class="photo-grid" style="margin-top:8px">${photos.slice(0, 4).map((ph) => `<div class="photo"><img src="${ph.dataUrl}" alt=""><button class="del" data-del-photo="${ph.id}">✕</button></div>`).join("")}</div>` : ""}
+    ${qs.length ? `<div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:10px">❓ QUESTIONS & FOLLOW-UPS</div>
+      ${qs.map((q) => `<div class="row" style="padding:5px 8px"><div class="check" data-resolve-q="${q.id}" style="width:18px;height:18px;font-size:11px;flex:0 0 auto">✓</div><div class="body"><div class="t" style="font-size:12px;white-space:normal">${q.kind === "note" ? "📝" : "❓"} ${esc(q.text)}</div></div></div>`).join("")}` : ""}
+
     ${Number(p.vacantUnits) ? `<div style="margin-top:8px;font-size:12px;color:#e0913a;font-weight:600">🔑 ${p.vacantUnits} vacant${p.vacantNote ? ` (${esc(p.vacantNote)})` : ""} — +${money0(Number(p.vacantRent) || 0)}/mo when filled</div>` : ""}
     ${p.strUnit ? `<div style="margin-top:8px;font-size:11.5px;color:#7aa2f7">🏨 ${esc(p.strNote || "Short-term rental unit")}</div>` : ""}
     ${p.strUnit ? (() => { const ms = strMonths(p.id), floor = Number(p.strFloorNet) || 0; const totNet = ms.reduce((a, m) => a + m.net, 0), totUp = ms.reduce((a, m) => a + m.upside, 0);
