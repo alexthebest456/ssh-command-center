@@ -2357,7 +2357,14 @@ function strMonths(propId) {
 // own grossRent figure (so you can load rent per building without entering every
 // individual lease). Expenses: itemized tax + insurance + other if given, else the
 // combined monthlyExpenses. Debt = mortgage P&I (loanPayment).
-function effectiveRent(p) { const lease = propMonthlyRent(p.id); return lease || Number(p.grossRent) || 0; }
+// Prefer the master-sheet grossRent (authoritative, reflects real collected rent
+// & vacancies) when it's been set — even if it's 0 — and only fall back to
+// DoorLoop lease rent for properties without a sheet figure. DoorLoop shows
+// scheduled gross (every unit at full rate), which overstates true net.
+function effectiveRent(p) {
+  if (p.grossRent !== undefined && p.grossRent !== null && p.grossRent !== "") return Number(p.grossRent) || 0;
+  return propMonthlyRent(p.id);
+}
 function effectiveExp(p) {
   const items = (Number(p.taxMonthly) || 0) + (Number(p.insuranceMonthly) || 0) + (Number(p.otherExpMonthly) || 0);
   return items > 0 ? items : Number(p.monthlyExpenses) || 0;
@@ -2368,8 +2375,8 @@ function portfolioNet() {
   const debt = state.properties.reduce((s, p) => s + (Number(p.loanPayment) || 0), 0);
   const doors = currentDoors();
   const totalVacant = state.properties.reduce((s, p) => s + (Number(p.vacantUnits) || 0), 0);
-  const occBase = state.leases.length || state.properties.filter((p) => effectiveRent(p) > 0).reduce((a, p) => a + (Number(p.units) || 1), 0);
-  const occupied = Math.max(0, occBase - totalVacant);
+  const rentedUnits = state.properties.filter((p) => effectiveRent(p) > 0).reduce((a, p) => a + (Number(p.units) || 0), 0);
+  const occupied = Math.max(0, rentedUnits - totalVacant);
   return { gross, exp, debt, net: gross - exp - debt, doors, occupied, vacant: totalVacant, vacantRent: state.properties.reduce((s, p) => s + (Number(p.vacantRent) || 0), 0), occPct: doors ? Math.round(occupied / doors * 100) : 0 };
 }
 
