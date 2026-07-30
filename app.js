@@ -1664,6 +1664,7 @@ VIEWS.builds = {
     root.querySelectorAll("[data-edit-str]").forEach((el) => el.addEventListener("click", () => editStrEntry(el.dataset.editStr)));
     root.querySelectorAll("[data-edit-draw]").forEach((el) => el.addEventListener("click", () => editDraw(el.dataset.editDraw)));
     root.querySelectorAll("[data-edit-trade]").forEach((el) => el.addEventListener("click", () => editTrade(el.dataset.editTrade)));
+    root.querySelectorAll("[data-photo-note-input]").forEach((el) => el.addEventListener("change", (e) => handlePhotoNoteUpload(el.dataset.photoNoteInput, e.target.files)));
     root.querySelectorAll("[data-add-question]").forEach((el) => el.addEventListener("click", () => addSiteQuestion(el.dataset.addQuestion)));
     root.querySelectorAll("[data-resolve-q]").forEach((el) => el.addEventListener("click", () => { const q = state.siteLog.find((x) => x.id === el.dataset.resolveQ); if (q) { DB.upsert("siteLog", { ...q, status: "resolved" }); toast("Resolved ✓"); } }));
     root.querySelectorAll("[data-gate]").forEach((el) => el.addEventListener("click", () => {
@@ -1948,12 +1949,12 @@ function projectCard(p) {
     <div style="margin-top:12px;font-size:12.5px"><strong>Next:</strong> ${esc(nextStep)}</div>
 
     <div class="flex" style="gap:8px;margin-top:10px">
-      <label class="btn sm primary" style="cursor:pointer;flex:1;text-align:center">📷 Site photo<input type="file" accept="image/*" capture="environment" multiple class="hide" data-photo-input="${p.id}"></label>
+      <label class="btn sm primary" style="cursor:pointer;flex:1;text-align:center">📷 Photo + note<input type="file" accept="image/*" capture="environment" multiple class="hide" data-photo-note-input="${p.id}"></label>
       <button class="btn sm" style="flex:1" data-add-question="${p.id}">❓ Question / note</button>
     </div>
     ${photos.length ? `<div class="photo-grid" style="margin-top:8px">${photos.slice(0, 4).map((ph) => `<div class="photo"><img src="${ph.dataUrl}" alt=""><button class="del" data-del-photo="${ph.id}">✕</button></div>`).join("")}</div>` : ""}
     ${qs.length ? `<div class="mono muted" style="font-size:9px;letter-spacing:.04em;margin-top:10px">❓ QUESTIONS & FOLLOW-UPS</div>
-      ${qs.map((q) => `<div class="row" style="padding:5px 8px"><div class="check" data-resolve-q="${q.id}" style="width:18px;height:18px;font-size:11px;flex:0 0 auto">✓</div><div class="body"><div class="t" style="font-size:12px;white-space:normal">${q.kind === "note" ? "📝" : "❓"} ${esc(q.text)}</div></div></div>`).join("")}` : ""}
+      ${qs.map((q) => `<div class="row" style="padding:5px 8px"><div class="check" data-resolve-q="${q.id}" style="width:18px;height:18px;font-size:11px;flex:0 0 auto">✓</div><div class="body"><div class="t" style="font-size:12px;white-space:normal">${q.kind === "note" ? "📝" : "❓"} ${esc(q.text)}${q.photoId ? ` <span title="has photo">📷</span>` : ""}</div></div></div>`).join("")}` : ""}
 
     ${Number(p.vacantUnits) ? `<div style="margin-top:8px;font-size:12px;color:#e0913a;font-weight:600">🔑 ${p.vacantUnits} vacant${p.vacantNote ? ` (${esc(p.vacantNote)})` : ""} — +${money0(Number(p.vacantRent) || 0)}/mo when filled</div>` : ""}
     ${p.strUnit ? `<div style="margin-top:8px;font-size:11.5px;color:#7aa2f7">🏨 ${esc(p.strNote || "Short-term rental unit")}</div>` : ""}
@@ -2115,6 +2116,46 @@ function handlePhotoUpload(propId, files) {
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
+  });
+}
+// Photo + note combo: snap, then attach a caption or a question-for-the-GC.
+function handlePhotoNoteUpload(propId, files) {
+  let pending = files.length; if (!pending) return;
+  const ids = [];
+  [...files].forEach((file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1280; let { width, height } = img;
+        if (width > max || height > max) { const r = Math.min(max / width, max / height); width = Math.round(width * r); height = Math.round(height * r); }
+        const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const id = genId();
+        DB.upsert("photos", { id, propertyId: propId, dataUrl: canvas.toDataURL("image/jpeg", 0.72), caption: "", date: todayISO(), createdAt: Date.now() });
+        ids.push(id);
+        if (--pending === 0) promptPhotoNote(propId, ids);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function promptPhotoNote(propId, ids) {
+  formModal({
+    title: ids.length > 1 ? `${ids.length} photos added` : "Photo added",
+    sub: "Add a caption, or flag a question for the GC — it attaches to this photo.",
+    fields: [
+      { key: "text", label: "Caption / question (optional)", type: "textarea" },
+      { key: "kind", label: "Type", type: "select", options: [["caption", "📝 Just a caption"], ["question", "❓ Question for GC"]] },
+    ],
+    values: { kind: "caption" },
+    onSubmit: (v) => {
+      if (!v.text) return;
+      for (const id of ids) { const ph = state.photos.find((x) => x.id === id); if (ph) DB.upsert("photos", { ...ph, caption: v.text }); }
+      if (v.kind === "question") DB.upsert("siteLog", { id: undefined, propertyId: propId, text: v.text, kind: "question", status: "open", at: Date.now(), photoId: ids[0] });
+      toast(v.kind === "question" ? "Question logged 📷" : "Caption saved");
+    },
   });
 }
 
