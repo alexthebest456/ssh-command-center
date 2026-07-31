@@ -745,13 +745,18 @@ function stabilizationTimeline() {
   // Running portfolio net as each build completes, in date order. Cash-on-cash
   // is per build: the new units' yearly rent ÷ the cash put into that build
   // (net of any refinance that returned cash, so a full cash-out reads ∞).
-  let running = baseNet;
+  let running = baseNet, cumRent = 0, cumCash = 0;
   const steps = builds.map((b) => {
     running += b.add;
     const cashDown = -b.cash;                 // + = cash left in the build, − = net cash returned
     const newAnnualRent = b.add * 12;         // yearly rent the new units add
     const coc = cashDown > 0 ? (newAnnualRent / cashDown) * 100 : Infinity;
-    return { ...b, net: running, cashDown, newAnnualRent, coc };
+    // Combined portfolio cash-on-cash so far: every build's new rent over every
+    // build's cash, blended — the running number that lands at the program total.
+    cumRent += newAnnualRent;
+    cumCash += cashDown;
+    const portCoc = cumCash > 0 ? (cumRent / cumCash) * 100 : Infinity;
+    return { ...b, net: running, cashDown, newAnnualRent, coc, portCoc };
   });
 
   // Net at a future horizon = base + every door ready by then.
@@ -1322,6 +1327,7 @@ VIEWS.investor = {
                   <th class="num">Cash in / out</th>
                   <th class="num">Portfolio net / mo</th>
                   <th class="num">Cash-on-cash</th>
+                  <th class="num">Portfolio CoC</th>
                 </tr>
               </thead>
               <tbody>
@@ -1334,6 +1340,7 @@ VIEWS.investor = {
                     <td class="num" style="color:${b.cash >= 0 ? "var(--st-green)" : "var(--st-red)"}">${b.cash >= 0 ? "+" : "−"}${esc(money0(Math.abs(b.cash)))}</td>
                     <td class="num" style="color:${b.net >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(shortK(b.net))}</td>
                     <td class="num" style="color:${(b.coc || 0) >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(pct(b.coc))}</td>
+                    <td class="num port-coc${i === tl.steps.length - 1 ? " final" : ""}">${esc(pct(b.portCoc))}</td>
                   </tr>`;
                 }).join("")}
               </tbody>
@@ -1342,7 +1349,8 @@ VIEWS.investor = {
           <div class="build-foot">
             <b>Rent in</b> — what each building collects once its new units lease ·
             <b>Cash in/out</b> — one-time build capital (a refinance returns cash) ·
-            <b>Cash-on-cash</b> — the new units' yearly rent ÷ the cash put into that build (a refinance that returns your cash pushes it toward ∞).
+            <b>Cash-on-cash</b> — the new units' yearly rent ÷ the cash put into that build (a refinance that returns your cash pushes it toward ∞) ·
+            <b>Portfolio CoC</b> — every build blended so far, landing at your program return once they're all done.
           </div>` : `<div class="empty" style="margin-top:16px">Every planned unit is built and leased. 🎉</div>`}
         </div>
 
