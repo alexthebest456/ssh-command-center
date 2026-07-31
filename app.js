@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyPlannedUnits, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -720,8 +720,15 @@ function stabilizationTimeline() {
   const totalInvested = state.properties.reduce((s, p) => s + (Number(p.cashInvested) || 0), 0);
   // One-time cash that moves during a property's build — down payments, remodels
   // and ADU spend go out; a refinance brings cash back. Signed: −out / +in.
-  const cashByProp = (id) => (state.cashEvents || []).filter((e) => e.propertyId === id)
-    .reduce((s, e) => s + cashSigned(e), 0);
+  // Construction draws (e.g. Washington's trade schedule) live in their own
+  // table and are always cash out, so they're subtracted on top of the dated
+  // cash events. No property carries both for the same cost today, so nothing
+  // is double-counted.
+  const cashByProp = (id) => {
+    const events = (state.cashEvents || []).filter((e) => e.propertyId === id).reduce((s, e) => s + cashSigned(e), 0);
+    const draws = (state.draws || []).filter((d) => d.propertyId === id).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    return events - draws;
+  };
 
   const builds = state.properties
     .filter((p) => (Number(p.plannedUnits) || 0) > 0 && parseISO(p.unitsReadyDate))
@@ -4050,6 +4057,7 @@ async function boot() {
   try { await applyWashingtonDraws(); } catch (e) { console.warn("wash draws skipped", e); }
   try { await applyWashingtonDates(); } catch (e) { console.warn("wash dates skipped", e); }
   try { await applyDevCashEvents(); } catch (e) { console.warn("dev cash skipped", e); }
+  try { await applyDevBuildCosts(); } catch (e) { console.warn("dev build costs skipped", e); }
   try { await applyPlannedUnits(); } catch (e) { console.warn("planned units skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();

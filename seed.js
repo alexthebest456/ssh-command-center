@@ -566,6 +566,28 @@ export async function applyDevCashEvents() {
   console.log("Development cash schedule seeded.");
 }
 
+// ── Build costs for deals whose spend wasn't itemized ────────────────────────
+// Muller and Spry showed $0 cash out because their only cash events were $0
+// placeholders (Washington's real spend lives in its draw schedule instead).
+// These are the owner's build-cost figures, added as one dated cash event each,
+// fill-if-absent so a later itemized breakdown is never overwritten.
+const DEV_BUILD_COSTS = [
+  { id: "dc-muller-build", type: "remodel", date: "2026-08-24", propertyId: "prop-muller", amount: 270000, note: "2 JADUs — build cost" },
+  { id: "dc-spry-build",   type: "remodel", date: "2026-08-15", propertyId: "prop-spry",   amount: 300000, note: "749 sqft ADU — build cost" },
+];
+export async function applyDevBuildCosts() {
+  if (localStorage.getItem("sshcc:dev-build-costs-v1")) return;
+  const ex = DB.getAll("cashEvents");
+  let n = 0;
+  for (const c of DEV_BUILD_COSTS) {
+    if (ex.some((x) => x.id === c.id)) continue;
+    await DB.upsert("cashEvents", { ...c, status: "scheduled" });
+    n++;
+  }
+  localStorage.setItem("sshcc:dev-build-costs-v1", "1");
+  console.log(`Dev build costs added on ${n} propert${n === 1 ? "y" : "ies"}.`);
+}
+
 // ── Washington schedule dates ────────────────────────────────────────────────
 // Effective working timeline (pause Feb 26–Jul 16 excluded): start anchored so
 // the 31 pre-pause working days are baked in, finish = the late-Sept forecast.
