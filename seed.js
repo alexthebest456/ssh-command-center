@@ -535,6 +535,37 @@ export async function applyWashingtonDraws() {
   console.log("Washington draws + trades seeded.");
 }
 
+// ── Development cash schedule (5-property model, base date Jul 30 2026) ───────
+// Dated capital events for the Cash Flow view. Construction totals are dated at
+// each phase's start (the report has the even monthly spread). Refis are net.
+const DEV_CASH = [
+  // Arrington (10522 / 10516)
+  { id: "dc-arr22-down", type: "down-payment", date: "2026-08-01", propertyId: "prop-arrington-10522", amount: 287875, note: "25% down + closing" },
+  { id: "dc-arr16-down", type: "down-payment", date: "2026-08-01", propertyId: "prop-arrington-10516", amount: 282875, note: "25% down + closing" },
+  { id: "dc-arr-cfk", type: "cash-for-keys", date: "2026-12-17", propertyId: "prop-arrington-10522", amount: 200000, note: "8 tenants × $25k (combined)" },
+  { id: "dc-arr-remodel", type: "remodel", date: "2026-12-17", propertyId: "prop-arrington-10522", amount: 128000, note: "8-unit remodel (spread to Feb 17)" },
+  { id: "dc-arr-adu", type: "remodel", date: "2027-03-10", propertyId: "prop-arrington-10522", amount: 512000, note: "4 ADUs, cash (spread to Jun 10)" },
+  { id: "dc-arr-refi", type: "refinance", date: "2027-03-17", propertyId: "prop-arrington-10522", amount: 447220, note: "Both buildings — net cash returned" },
+  // Inglewood
+  { id: "dc-ing-remodel", type: "remodel", date: "2026-08-29", propertyId: "prop-inglewood", amount: 300000, note: "4-unit remodel (spread to Oct 29)" },
+  { id: "dc-ing-refi1", type: "other", date: "2026-11-29", propertyId: "prop-inglewood", amount: 95000, note: "Refi 1 SHORTFALL (975k − 1.065M LOC − 5k)" },
+  { id: "dc-ing-garage", type: "remodel", date: "2027-03-29", propertyId: "prop-inglewood", amount: 280000, note: "2 garage conversions (spread to Jun 29)" },
+  { id: "dc-ing-refi2", type: "refinance", date: "2027-07-29", propertyId: "prop-inglewood", amount: 375422, note: "Refi 2 — net cash returned" },
+  // 12th Street (Seal Beach)
+  { id: "dc-12th-remodel", type: "remodel", date: "2026-11-01", propertyId: "prop-140-12th", amount: 30000, note: "3-unit remodel (spread to Dec 16)" },
+  { id: "dc-12th-adu", type: "remodel", date: "2027-03-03", propertyId: "prop-140-12th", amount: 230000, note: "ADU, cash (spread to Jun 3)" },
+  // Painter
+  { id: "dc-paint-remodel", type: "remodel", date: "2026-09-01", propertyId: "prop-painter-11912", amount: 90000, note: "3-unit remodel (spread to Oct 16)" },
+  { id: "dc-paint-adu", type: "remodel", date: "2027-03-03", propertyId: "prop-painter-11912", amount: 719040, note: "3 ADUs, cash (spread to Jul 18)" },
+];
+export async function applyDevCashEvents() {
+  if (localStorage.getItem("sshcc:dev-cash-v1")) return;
+  const ex = DB.getAll("cashEvents");
+  for (const c of DEV_CASH) { if (ex.some((x) => x.id === c.id)) continue; await DB.upsert("cashEvents", { ...c, status: "scheduled" }); }
+  localStorage.setItem("sshcc:dev-cash-v1", "1");
+  console.log("Development cash schedule seeded.");
+}
+
 // ── Washington schedule dates ────────────────────────────────────────────────
 // Effective working timeline (pause Feb 26–Jul 16 excluded): start anchored so
 // the 31 pre-pause working days are baked in, finish = the late-Sept forecast.
