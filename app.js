@@ -716,15 +716,29 @@ function stabilizedNet() {
 function stabilizationTimeline() {
   const baseNet = portfolioNet().net;
   const unitRent = getAssumptions().avgUnitRent;
+  // Cash-on-cash denominator: net cash put into the whole portfolio.
+  const totalInvested = state.properties.reduce((s, p) => s + (Number(p.cashInvested) || 0), 0);
+  // One-time cash that moves during a property's build — down payments, remodels
+  // and ADU spend go out; a refinance brings cash back. Signed: −out / +in.
+  const cashByProp = (id) => (state.cashEvents || []).filter((e) => e.propertyId === id)
+    .reduce((s, e) => s + cashSigned(e), 0);
+
   const builds = state.properties
     .filter((p) => (Number(p.plannedUnits) || 0) > 0 && parseISO(p.unitsReadyDate))
-    .map((p) => ({ id: p.id, name: p.name, units: Number(p.plannedUnits) || 0,
-      date: p.unitsReadyDate, d: parseISO(p.unitsReadyDate), add: (Number(p.plannedUnits) || 0) * unitRent }))
+    .map((p) => {
+      const planned = Number(p.plannedUnits) || 0;
+      const add = planned * unitRent;                       // net income this build adds
+      return { id: p.id, name: p.name, date: p.unitsReadyDate, d: parseISO(p.unitsReadyDate),
+        planned, totalUnits: (Number(p.units) || 0) + planned,
+        rentIn: effectiveRent(p) + add,                     // stabilized rent this building brings in
+        add, cash: cashByProp(p.id) };
+    })
     .sort((a, b) => a.d - b.d);
 
-  // Running net as each build completes, in date order.
+  // Running portfolio net + cash-on-cash as each build completes, in date order.
   let running = baseNet;
-  const steps = builds.map((b) => { running += b.add; return { ...b, net: running }; });
+  const coc = (net) => (totalInvested ? (net * 12 / totalInvested) * 100 : null);
+  const steps = builds.map((b) => { running += b.add; return { ...b, net: running, coc: coc(running) }; });
 
   // Net at a future horizon = base + every door ready by then.
   const netBy = (monthsAhead) => {
@@ -732,11 +746,12 @@ function stabilizationTimeline() {
     return baseNet + builds.filter((b) => b.d <= H).reduce((s, b) => s + b.add, 0);
   };
 
-  const doorsTotal = builds.reduce((s, b) => s + b.units, 0);
+  const doorsTotal = builds.reduce((s, b) => s + b.planned, 0);
+  const stabilized = baseNet + doorsTotal * unitRent;
   const last = builds.length ? builds[builds.length - 1] : null;
-  return { baseNet, unitRent, steps, doorsTotal,
-    now: baseNet, m6: netBy(6), y1: netBy(12),
-    stabilized: baseNet + doorsTotal * unitRent,
+  return { baseNet, unitRent, steps, doorsTotal, totalInvested,
+    now: baseNet, m6: netBy(6), y1: netBy(12), stabilized,
+    cocNow: coc(baseNet), cocStab: coc(stabilized),
     lastDate: last ? last.date : null, lastD: last ? last.d : null };
 }
 
@@ -1284,17 +1299,37 @@ VIEWS.investor = {
           </div>
 
           ${tl.steps.length ? `
-          <div class="build-timeline">
-            ${tl.steps.map((b, i) => `
-              <div class="build-step${i === tl.steps.length - 1 ? " last" : ""}" data-open-project="${b.id}" title="Open ${esc(b.name)}">
-                <div class="dot"></div>
-                <div class="when">${esc(fmtDate(b.date))}, ${esc(String(b.d.getFullYear()))}</div>
-                <div class="body">
-                  <div class="t">${esc(b.name)}</div>
-                  <div class="s">+${b.units} door${b.units > 1 ? "s" : ""} leased</div>
-                </div>
-                <div class="net" style="color:${b.net >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(shortK(b.net))}<span class="u">/mo</span></div>
-              </div>`).join("")}
+          <div class="build-table-wrap">
+            <table class="build-table">
+              <thead>
+                <tr>
+                  <th>Completed</th>
+                  <th>Property</th>
+                  <th class="num">Rent in / mo</th>
+                  <th class="num">Cash in / out</th>
+                  <th class="num">Portfolio net / mo</th>
+                  <th class="num">Cash-on-cash</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tl.steps.map((b, i) => {
+                  const pct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%");
+                  return `<tr class="build-row${i === tl.steps.length - 1 ? " last" : ""}" data-open-project="${b.id}" title="Open ${esc(b.name)}">
+                    <td class="when">${esc(fmtDate(b.date))}, ${esc(String(b.d.getFullYear()))}</td>
+                    <td class="prop"><span class="dot"></span><span class="nm">${esc(b.name)}</span><span class="u">${b.totalUnits} units · +${b.planned} new</span></td>
+                    <td class="num pos">+${esc(money0(b.rentIn))}</td>
+                    <td class="num" style="color:${b.cash >= 0 ? "var(--st-green)" : "var(--st-red)"}">${b.cash >= 0 ? "+" : "−"}${esc(money0(Math.abs(b.cash)))}</td>
+                    <td class="num" style="color:${b.net >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(shortK(b.net))}</td>
+                    <td class="num" style="color:${(b.coc || 0) >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(pct(b.coc))}</td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="build-foot">
+            <b>Rent in</b> — what each building collects once its new units lease ·
+            <b>Cash in/out</b> — one-time build capital (a refinance returns cash) ·
+            <b>Cash-on-cash</b> — portfolio net ÷ ${esc(money0(tl.totalInvested))} cash invested, climbing as the builds fill.
           </div>` : `<div class="empty" style="margin-top:16px">Every planned unit is built and leased. 🎉</div>`}
         </div>
 
