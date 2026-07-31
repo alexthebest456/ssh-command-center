@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyPlannedUnits, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -670,148 +670,716 @@ function projHealth(p) {
   if (sc.status && sc.status.label.includes("behind")) return "yellow";
   return "green";
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DASHBOARD METRICS
+//  Pure reads over `state` — no writes, no side effects. Every number the two
+//  dashboards show comes from here, so the screens stay honest as the
+//  underlying properties, tasks, leases, draws and cash events change.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Balance-sheet position across the whole portfolio.
+function portfolioCapital() {
+  let value = 0, debt = 0;
+  for (const p of state.properties) { value += Number(p.currentValue) || 0; debt += Number(p.loanBalance) || 0; }
+  return { value, debt, equity: value - debt, ltvPct: value ? Math.round((debt / value) * 100) : 0 };
+}
+
+// New doors under development (ADUs / JADUs / garage conversions).
+function plannedDoors() { return state.properties.reduce((s, p) => s + (Number(p.plannedUnits) || 0), 0); }
+function propStabilizedRent(p) { return effectiveRent(p) + (Number(p.plannedUnits) || 0) * getAssumptions().avgUnitRent; }
+
+// Rent collected today vs. rent once every planned door is built and leased.
+// Per-unit rent is the app's own `avgUnitRent` assumption, editable from
+// Portfolio Performance — it is never hard-coded here.
+function stabilizedRent() {
+  const today = portfolioNet().gross;
+  const unitRent = getAssumptions().avgUnitRent;
+  const newUnits = plannedDoors();
+  const upside = newUnits * unitRent;
+  const target = today + upside;
+  return { today, target, upside, newUnits, unitRent, pct: target ? Math.round((today / target) * 100) : 100 };
+}
+// True net today, and where it lands once that rent arrives (costs held flat).
+function stabilizedNet() {
+  const n = portfolioNet(), s = stabilizedRent();
+  return { now: n.net, then: n.net + s.upside, upside: s.upside };
+}
+
+function isStale(p) { return !p.lastUpdate || (Date.now() - p.lastUpdate) > 7 * DAY; }
+function isBlocked(p) { return ["city", "contractor", "consultant", "tenant"].includes(p.waitingOn); }
+function isPermitting(p) {
+  const s = (p.permitStatus || "").toLowerCase();
+  return !!s && !/^permitted|complete/.test(s);
+}
+function overdueTasks() { return openTasks().filter((t) => { const n = daysUntil(t.due); return n !== null && n < 0; }); }
+
+// Gated / due construction draws still waiting on money, across every property.
+function pendingDraws() {
+  const list = (state.draws || []).filter((d) => d.status === "gated" || d.status === "due");
+  return { list, total: list.reduce((s, d) => s + (Number(d.amount) || 0), 0) };
+}
+// The property with a live draw schedule — the budget-vs-actual bar's subject.
+function drawSubject() {
+  const byProp = new Map();
+  for (const d of state.draws || []) {
+    if (!byProp.has(d.propertyId)) byProp.set(d.propertyId, []);
+    byProp.get(d.propertyId).push(d);
+  }
+  let best = null;
+  for (const [pid, draws] of byProp) {
+    const gated = draws.some((d) => d.status === "gated" || d.status === "due");
+    const score = draws.length + (gated ? 100 : 0);
+    if (!best || score > best.score) best = { pid, draws: draws.slice().sort((a, b) => a.num - b.num), score, gated };
+  }
+  if (!best) return null;
+  const sum = (f) => best.draws.filter(f).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const contract = sum(() => true);
+  const paid = sum((d) => d.status === "paid");
+  const gated = sum((d) => d.status === "gated" || d.status === "due");
+  const future = Math.max(0, contract - paid - gated);
+  const pct = (v) => (contract ? (v / contract) * 100 : 0);
+  return { pid: best.pid, name: propName(best.pid) || "Construction", draws: best.draws, contract, paid, gated, future,
+    paidPct: pct(paid), gatedPct: pct(gated), futurePct: pct(future) };
+}
+
+// Refinances and financing events — the capital coming back (or the shortfall).
+function refiLedger() {
+  return (state.cashEvents || [])
+    .filter((e) => e.type === "refinance" || /refi|loc|shortfall/i.test(e.note || ""))
+    .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"))
+    .map((e) => {
+      const amt = cashSigned(e);
+      return { e, amt, inflow: amt >= 0, name: `${propName(e.propertyId) || "Portfolio"}${e.note ? " · " + e.note.replace(/\s*\(.*\)$/, "") : ""}`,
+        when: e.date ? fmtDate(e.date) + ", " + (parseISO(e.date) || todayDate()).getFullYear() : "unscheduled" };
+    });
+}
+
+// ── "Needs you today" ────────────────────────────────────────────────────────
+// One ranked list replacing the old Top-5 / Needs-Attention / Waiting-On trio.
+// Every source that fed those panels still feeds this one; nothing is dropped,
+// it is just ordered by how much it actually costs you to ignore.
+function attentionItems() {
+  const out = [];
+  const push = (o) => out.push(o);
+  const RED = "var(--st-red)", AMBER = "var(--st-amber)", BLUE = "var(--st-blue)";
+
+  for (const t of openTasks()) {
+    const n = daysUntil(t.due);
+    const pn = propName(t.propertyId);
+    if (n !== null && n < 0) {
+      push({ score: 1000 + Math.min(200, -n), title: t.title, sub: `${pn ? pn + " · " : ""}${-n}d overdue`,
+        flag: `${-n}D OVER`, color: RED, taskId: t.id, tip: "Past its due date — reschedule it or clear it." });
+    } else if (n === 0) {
+      push({ score: 900, title: t.title, sub: `${pn ? pn + " · " : ""}due today`, flag: "TODAY", color: RED, taskId: t.id, tip: "Due today." });
+    } else if (n === 1) {
+      push({ score: 850, title: t.title, sub: `${pn ? pn + " · " : ""}due tomorrow`, flag: "TOMORROW", color: RED, taskId: t.id, tip: "Due tomorrow." });
+    } else if (t.priority >= 2) {
+      push({ score: 700, title: t.title, sub: `${pn ? pn + " · " : ""}${n === null ? "no due date" : "in " + n + "d"}`,
+        flag: "HIGH", color: AMBER, taskId: t.id, tip: "Flagged high priority." });
+    }
+  }
+
+  // Money leaving the account inside the week — the audit's biggest blind spot.
+  for (const e of state.cashEvents || []) {
+    if (e.status === "done") continue;
+    const n = daysUntil(e.date);
+    if (n === null || n < 0 || n > 7) continue;
+    const amt = cashSigned(e);
+    if (amt >= 0) continue;
+    const t = cashType(e.type);
+    push({ score: 950 - n, title: `${t.label}${propName(e.propertyId) ? " — " + propName(e.propertyId) : ""} · ${money0(-amt)}`,
+      sub: e.note || t.label, flag: n === 0 ? "TODAY" : n === 1 ? "TOMORROW" : `IN ${n}D`, color: RED,
+      cashId: e.id, tip: `${money0(-amt)} leaves the account ${n === 0 ? "today" : "on " + fmtDate(e.date)}.` });
+  }
+
+  for (const p of managedProjects()) {
+    const sc = scheduleMetrics(p), b = budgetMetrics(p);
+    if (sc.status && sc.status.label.includes("Overdue")) {
+      push({ score: 800, title: `${p.name} — ${sc.status.label}`, sub: p.nextMilestone || p.bottleneck || "past its finish date",
+        flag: "OVERDUE", color: RED, propId: p.id, tip: "Target finish date has passed." });
+    } else if (b.over && b.spent > 0) {
+      push({ score: 780, title: `${p.name} is over budget`, sub: `${money0(b.spent)} spent of ${money0(b.budget)} · final ${money0(b.eac)}`,
+        flag: "OVER", color: RED, propId: p.id, tip: "Projected final cost exceeds the budget." });
+    } else if (sc.status && sc.status.label.includes("behind")) {
+      push({ score: 600, title: `${p.name} — ${sc.status.label}`, sub: p.nextMilestone || p.bottleneck || "slipping against plan",
+        flag: "BEHIND", color: AMBER, propId: p.id, tip: "Work done is behind time elapsed." });
+    } else if (isBlocked(p)) {
+      push({ score: 500, title: `${p.name} — ${p.bottleneck || "blocked"}`, sub: `Waiting on ${WAITING_LABELS[p.waitingOn] || p.waitingOn}`,
+        flag: "WAITING", color: AMBER, propId: p.id, tip: "Someone else has to move before this can." });
+    } else if (isStale(p)) {
+      push({ score: 300, title: `${p.name} — no update in 7+ days`, sub: p.nextMilestone || p.nextStep || "log where it stands",
+        flag: "STALE", color: BLUE, propId: p.id, tip: "Nothing logged for over a week." });
+    }
+  }
+
+  return out.sort((a, b) => b.score - a.score);
+}
+
+// ── Deadline feed ────────────────────────────────────────────────────────────
+// Property milestones, calendar events and dated money, merged onto one
+// timeline and grouped by day so a single date reads as a single line.
+function deadlineFeed(days) {
+  const items = [];
+  for (const p of managedProjects()) {
+    if (!p.nextDeadline) continue;
+    const n = daysUntil(p.nextDeadline);
+    if (n === null || n < 0 || n > days) continue;
+    items.push({ date: p.nextDeadline, n, label: `${p.name} — ${p.nextMilestone || "deadline"}`, propId: p.id });
+  }
+  for (const e of state.events) {
+    const n = daysUntil(e.date);
+    if (n === null || n < 0 || n > days) continue;
+    items.push({ date: e.date, n, label: `${e.title}${propName(e.propertyId) ? " · " + propName(e.propertyId) : ""}` });
+  }
+  for (const c of state.cashEvents || []) {
+    if (c.status === "done") continue;
+    const n = daysUntil(c.date);
+    if (n === null || n < 0 || n > days) continue;
+    const amt = cashSigned(c), t = cashType(c.type);
+    const money = Number(c.amount) ? ` ${amt < 0 ? "−" : "+"}${money0(Math.abs(amt))}` : "";
+    items.push({ date: c.date, n, label: `${c.note || t.label}${propName(c.propertyId) ? " · " + propName(c.propertyId) : ""}${money}`, cashId: c.id });
+  }
+  items.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  const byDate = [];
+  for (const it of items) {
+    const last = byDate[byDate.length - 1];
+    if (last && last.date === it.date) { last.parts.push(it.label); if (!last.propId) last.propId = it.propId; continue; }
+    byDate.push({ date: it.date, n: it.n, parts: [it.label], propId: it.propId });
+  }
+  // A busy day still reads as one line: show the first two, count the rest, and
+  // keep the full list in the tooltip.
+  const SHOWN = 2;
+  return byDate.map((g) => {
+    const d = parseISO(g.date);
+    const color = g.n <= 1 ? "var(--st-red)" : g.n <= 30 ? "var(--st-amber)" : "var(--dash-dim)";
+    return { date: d ? d.toLocaleDateString("en-US", { month: "short", day: "2-digit" }).toUpperCase() : "",
+      iso: g.date, label: g.parts.slice(0, SHOWN).join(" · "),
+      more: Math.max(0, g.parts.length - SHOWN), full: g.parts.join(" · "),
+      color, propId: g.propId,
+      in: g.n === 0 ? "today" : g.n === 1 ? "tomorrow" : `in ${g.n}d` };
+  });
+}
+
+// ── 12-month build schedule ──────────────────────────────────────────────────
+// Bars are derived from real dates only — the project's own start/finish, and
+// the dated construction and refinance events on the cash schedule. A project
+// with no dates set draws no bar rather than an invented one.
+const GANTT_MONTHS = 12;
+function ganttWindow() {
+  const start = startOfMonth(todayDate());
+  const end = addMonths(start, GANTT_MONTHS);
+  return { start, end, span: Math.max(1, end - start) };
+}
+function ganttMonths(win) {
+  const out = [];
+  for (let i = 0; i < GANTT_MONTHS; i++) out.push(addMonths(win.start, i).toLocaleDateString("en-US", { month: "short" }).toUpperCase());
+  return out;
+}
+function ganttSeg(win, from, to) {
+  if (!from || !to || to <= from) return null;
+  const clamp = (d) => Math.max(0, Math.min(100, ((d - win.start) / win.span) * 100));
+  const l = clamp(from), r = clamp(to);
+  if (r - l < 0.5) return null;
+  return { left: l.toFixed(1) + "%", width: (r - l).toFixed(1) + "%" };
+}
+function buildSchedule(win) {
+  const BUILD_TYPES = ["remodel", "invoice", "material"];
+  const SOFT_TYPES = ["architect", "permit-fee", "closing", "down-payment", "cash-for-keys"];
+  const rows = [];
+  for (const p of managedProjects()) {
+    if (p.nonConstruction) continue;
+    const sc = scheduleMetrics(p);
+    const evs = (state.cashEvents || []).filter((e) => e.propertyId === p.id && e.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const build = evs.filter((e) => BUILD_TYPES.includes(e.type));
+    const soft = evs.filter((e) => SOFT_TYPES.includes(e.type));
+    const refi = evs.filter((e) => e.type === "refinance");
+
+    let cStart = sc.start || (build.length ? parseISO(build[0].date) : null);
+    let cEnd = sc.done;
+    if (!cEnd) {
+      if (build.length) cEnd = addMonths(parseISO(build[build.length - 1].date), 3);
+      else if (p.nextDeadline) cEnd = addMonths(parseISO(p.nextDeadline), 3);
+    }
+    let pStart = null, pEnd = null;
+    if (isPermitting(p) && cStart) { pStart = soft.length ? parseISO(soft[0].date) : win.start; pEnd = cStart; }
+    else if (isPermitting(p) && !cStart && p.nextDeadline) { pStart = win.start; pEnd = parseISO(p.nextDeadline); }
+    const lEnd = cEnd ? (refi.length ? parseISO(refi[refi.length - 1].date) : addMonths(cEnd, 2)) : null;
+
+    const permit = ganttSeg(win, pStart, pEnd);
+    const construct = ganttSeg(win, cStart, cEnd);
+    const lease = ganttSeg(win, cEnd, lEnd);
+    if (!permit && !construct && !lease) continue;
+
+    const tags = [];
+    if (propPhase(p) === "active") tags.push("active");
+    if (isBlocked(p)) tags.push("blocked");
+    if (isPermitting(p)) tags.push("permitting");
+
+    rows.push({ id: p.id, name: p.name, tags, permit, construct, lease,
+      stage: p.bottleneck || p.nextMilestone || sc.stages[sc.idx] || phaseMeta(propPhase(p)).label,
+      tip: [p.nextMilestone, sc.start ? "start " + fmtDate(toISO(sc.start)) : "", sc.done ? "finish " + fmtDate(toISO(sc.done)) : ""].filter(Boolean).join(" · ") });
+  }
+  return rows;
+}
+
+// ── Property status table ────────────────────────────────────────────────────
+// Capital at risk = cash already in + money still scheduled to go out.
+function capitalAtRisk(p) {
+  const invested = Number(p.cashInvested) || 0;
+  const committed = (state.cashEvents || [])
+    .filter((e) => e.propertyId === p.id && e.status !== "done" && cashSigned(e) < 0)
+    .reduce((s, e) => s + Math.abs(cashSigned(e)), 0);
+  return Math.max(0, invested) + committed;
+}
+const HEALTH_LABEL = { green: "ON TRACK", yellow: "WATCH", red: "AT RISK" };
+const HEALTH_VAR = { green: "var(--st-green)", yellow: "var(--st-amber)", red: "var(--st-red)" };
+const PHASE_TINT = {
+  active: { bg: "rgba(127,168,209,.16)", fg: "var(--st-blue)" },
+  pipeline: { bg: "rgba(168,85,247,.16)", fg: "var(--st-violet)" },
+  land: { bg: "rgba(200,168,107,.16)", fg: "var(--st-amber)" },
+  completed: { bg: "rgba(111,191,139,.16)", fg: "var(--st-green)" },
+};
+// A building with new doors under development, or construction money still
+// scheduled to go out, is not "stabilized" however propPhase() classes it —
+// that mislabelling is exactly what the audit flagged. This corrects the
+// dashboard's own grouping without touching propPhase(), which the Projects
+// view and the portfolio donut share.
+function hasLiveDevelopment(p) {
+  if ((Number(p.plannedUnits) || 0) > 0) return true;
+  return (state.cashEvents || []).some((e) => {
+    if (e.propertyId !== p.id || e.status === "done" || cashSigned(e) >= 0) return false;
+    const n = daysUntil(e.date);
+    return n !== null && n >= 0;
+  });
+}
+function propScope(p) { return (propPhase(p) !== "completed" || hasLiveDevelopment(p)) ? "inmotion" : "stabilized"; }
+function dashPhase(p) {
+  const phase = propPhase(p);
+  if (phase === "completed" && hasLiveDevelopment(p)) return { label: "Value-add", tint: PHASE_TINT.land };
+  return { label: phaseMeta(phase).label, tint: PHASE_TINT[phase] || PHASE_TINT.active };
+}
+function propertyRows(scope) {
+  const rows = state.properties.filter((p) => !p.nonConstruction && (scope === "all" || propScope(p) === scope));
+  return rows.map((p) => {
+    const sc = scheduleMetrics(p);
+    const health = projHealth(p);
+    const dp = dashPhase(p);
+    const pct = propScope(p) === "stabilized" ? 100 : Math.round((sc.idx / Math.max(1, sc.n - 1)) * 100);
+    const tint = dp.tint;
+    return { p, id: p.id, name: p.name, city: p.city || (p.address || "").split(",")[1]?.trim() || "",
+      units: `${Number(p.units) || 0} door${Number(p.units) === 1 ? "" : "s"}`,
+      phase: dp.label, phaseBg: tint.bg, phaseFg: tint.fg,
+      pct: pct + "%", step: p.nextMilestone || p.nextStep || p.bottleneck || sc.stages[sc.idx] || "",
+      rent: money0(effectiveRent(p)), stab: money0(propStabilizedRent(p)),
+      health: HEALTH_LABEL[health], hColor: HEALTH_VAR[health], risk: capitalAtRisk(p) };
+  }).sort((a, b) => b.risk - a.risk);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  REUSABLE DASHBOARD COMPONENTS
+//  Small pure functions returning HTML, shared by both dashboards.
+// ─────────────────────────────────────────────────────────────────────────────
+function dashTile({ k, v, sub, tone = "", goto = "", tip = "" }) {
+  return `<div class="dash-tile ${tone}"${goto ? ` data-goto="${goto}"` : ""}${tip ? ` title="${esc(tip)}"` : ""}>
+    <div class="k">${esc(k)}</div><div class="v">${esc(String(v))}</div><div class="sub">${esc(sub)}</div></div>`;
+}
+function dashCard(title, body, { alert = false, right = "", cls = "" } = {}) {
+  return `<div class="dash-card ${alert ? "alert" : ""} ${cls}">
+    <div class="dash-card-head">
+      <div class="dash-card-title ${alert ? "alert" : ""}">${title}</div>
+      ${right || ""}
+    </div>${body}</div>`;
+}
+function dashMeter(pct, color) { return `<div class="dash-meter"><span style="width:${pct};background:${color}"></span></div>`; }
+// A task-backed item gets a real checkbox (tick it done here, as before); a
+// project or money item opens its own screen instead.
+function attentionRow(a) {
+  const hook = a.taskId ? ` data-edit-task="${a.taskId}"` : a.propId ? ` data-open-project="${a.propId}"` : a.cashId ? ` data-goto="cashflow"` : "";
+  return `<div class="dash-item" title="${esc(a.tip || "")}">
+    ${a.taskId
+      ? `<div class="dash-check" data-toggle="${a.taskId}" title="Mark done">✓</div>`
+      : `<div class="dot" style="background:${a.color}"></div>`}
+    <div class="body" style="cursor:pointer"${hook}><div class="t">${esc(a.title)}</div><div class="m">${esc(a.sub)}</div></div>
+    <div class="flag" style="color:${a.color}">${esc(a.flag)}</div>
+  </div>`;
+}
+function deadlineRow(d) {
+  return `<div class="dash-deadline"${d.propId ? ` data-open-project="${d.propId}" style="cursor:pointer"` : ""} title="${esc(d.full || d.label)}">
+    <div class="d">${esc(d.date)}</div>
+    <div class="l">${esc(d.label)}${d.more ? ` <span class="more">+${d.more} more</span>` : ""}</div>
+    <div class="in" style="color:${d.color}">${esc(d.in)}</div></div>`;
+}
+function chipRow(items) {
+  return `<div class="chip-row">${items.map((c) =>
+    `<button class="chip ${c.on ? "on" : ""}" data-dash-filter="${c.key}">${esc(c.label)}</button>`).join("")}</div>`;
+}
+function ganttBlock(win, rows, filter) {
+  const months = ganttMonths(win);
+  const todayPct = (((todayDate() - win.start) / win.span) * 100).toFixed(1) + "%";
+  const shown = rows.filter((r) => filter === "all" || r.tags.includes(filter));
+  const bar = (seg, cls, tip) => seg ? `<div class="gantt-bar ${cls}" style="left:${seg.left};width:${seg.width}" title="${esc(tip)}"></div>` : "";
+  return `<div class="gantt-scroll"><div class="gantt-inner">
+    <div class="gantt-head">
+      <div></div>
+      <div class="gantt-months">${months.map((m) => `<div>${m}</div>`).join("")}</div>
+    </div>
+    ${shown.length ? shown.map((g) => `
+      <div class="gantt-row" data-open-project="${g.id}" style="cursor:pointer">
+        <div><div class="name">${esc(g.name)}</div><div class="stage">${esc(g.stage)}</div></div>
+        <div class="gantt-track">
+          ${bar(g.permit, "permit", `${g.name} — permitting`)}
+          ${bar(g.construct, "build", `${g.name} — construction${g.tip ? " · " + g.tip : ""}`)}
+          ${bar(g.lease, "lease", `${g.name} — lease-up`)}
+          <div class="gantt-today" style="left:${todayPct}" title="Today"></div>
+        </div>
+      </div>`).join("")
+      : `<div class="empty">No projects match this filter.</div>`}
+  </div></div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  3a · COMMAND CENTER — the operator view (Alex)
+// ─────────────────────────────────────────────────────────────────────────────
+let dashScope = "all";    // property-table scope: all / inmotion / stabilized
+let dashFilter = "all";   // build-schedule filter: all / active / blocked / permitting
+
 VIEWS.command = {
   render() {
     const managed = managedProjects();
-    const scOf = (p) => scheduleMetrics(p);
-    const behind = (p) => { const s = scOf(p).status; return !!(s && (s.label.includes("behind") || s.label.includes("Overdue"))); };
-    const overB = (p) => { const b = budgetMetrics(p); return b.over && b.spent > 0; };
-    const staleF = (p) => { const t = p.lastUpdate; return !t || (Date.now() - t) > 7 * DAY; };
     const active = managed.filter((p) => propPhase(p) === "active");
-    const delayed = managed.filter(behind);
-    const waiting = managed.filter((p) => ["city", "contractor", "consultant"].includes(p.waitingOn));
-    const onSched = active.filter((p) => { const s = scOf(p).status; return s && (s.label === "On track" || s.label === "Complete"); });
-    const attention = managed.filter((p) => behind(p) || overB(p) || staleF(p) || p.health === "red").sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
-    const top = rankedTasks().slice(0, 5);
-    const doFirst = top[0];
-    const waitGroup = (k) => managed.filter((p) => p.waitingOn === k);
-    const calls = [...waitGroup("contractor"), ...waitGroup("consultant")];
-    const upc = [];
-    for (const p of managed) if (p.nextDeadline) { const n = daysUntil(p.nextDeadline); if (n != null && n >= 0 && n <= 60) upc.push({ date: p.nextDeadline, label: `${p.name} — ${p.nextMilestone || "deadline"}`, id: p.id }); }
-    for (const e of state.events) { const n = daysUntil(e.date); if (n != null && n >= 0 && n <= 45) upc.push({ date: e.date, label: `${e.title}${propName(e.propertyId) ? " · " + propName(e.propertyId) : ""}`, type: e.type }); }
-    upc.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const blocked = managed.filter(isBlocked);
+    const stale = managed.filter(isStale);
+    const overdue = overdueTasks();
+    const draws = pendingDraws();
+    const stab = stabilizedRent();
+    const attention = attentionItems();
+    const deadlines = deadlineFeed(60);
+    const win = ganttWindow();
+    const gantt = buildSchedule(win);
+    const rows = propertyRows(dashScope);
 
-    const reason = (p) => { const s = scOf(p).status; if (s && s.label.includes("Overdue")) return `<span style="color:#dc5050">${esc(s.label)}</span>`; if (overB(p)) return `<span style="color:#dc5050">over budget</span>`; if (s && s.label.includes("behind")) return `<span style="color:#e0913a">${esc(s.label)}</span>`; if (staleF(p)) return `<span style="color:#e0913a">no update 7d+</span>`; return `<span class="muted">${esc(p.bottleneck || "on track")}</span>`; };
-    const projLine = (p, sub) => `<div class="row" data-open-project="${p.id}" style="cursor:pointer"><div class="body"><div class="t" style="font-size:13px">${HEALTH[projHealth(p)].dot} ${esc(p.name)}</div><div class="m" style="white-space:normal">${sub || reason(p)}</div></div><div class="actions"><span class="mono muted">›</span></div></div>`;
+    const scopes = [["all", "All"], ["inmotion", "In motion"], ["stabilized", "Stabilized"]].map(([key, label]) => {
+      const n = state.properties.filter((p) => !p.nonConstruction && (key === "all" || propScope(p) === key)).length;
+      return `<button class="scope-btn ${dashScope === key ? "on" : ""}" data-dash-scope="${key}">${label} ${n}</button>`;
+    }).join("");
+
+    const filters = [["all", "ALL"], ["active", "ACTIVE"], ["blocked", "BLOCKED"], ["permitting", "PERMITTING"]]
+      .map(([key, label]) => ({ key, label, on: dashFilter === key }));
 
     return `
-    <div class="view">
-      <div class="view-head"><div><div class="eyebrow">SSH Development · COO</div><h1>Command Center</h1></div>
-        <div class="meta">${esc(fmtLong(todayDate()))}</div></div>
-
-      ${doFirst ? `<div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
-        <div class="flex between wrap"><div class="panel-title" style="margin:0"><span class="n">🎯</span> Do this first</div><span class="tag amber">${esc(whyOneThing(doFirst))}</span></div>
-        <div style="font-size:19px;font-weight:800;margin-top:6px">${esc(doFirst.title)}</div>
-        <div class="mono muted" style="font-size:11px;margin-top:3px">${propName(doFirst.propertyId) ? "▦ " + esc(propName(doFirst.propertyId)) : "Portfolio"}</div>
-        <div class="flex mt" style="gap:8px"><button class="btn primary sm" data-one-done="${doFirst.id}">✓ Done — next</button><button class="btn sm ghost" data-goto="now">Focus mode →</button></div>
-      </div>` : ""}
-
-      <div class="grid cols-4 mb">
-        <div class="stat"><div class="k">Active</div><div class="v">${active.length}</div><div class="sub">in motion</div></div>
-        <div class="stat"><div class="k">Delayed</div><div class="v ${delayed.length ? "red" : "green"}">${delayed.length}</div><div class="sub">behind schedule</div></div>
-        <div class="stat"><div class="k">Waiting</div><div class="v ${waiting.length ? "amber" : ""}">${waiting.length}</div><div class="sub">on city / others</div></div>
-        <div class="stat"><div class="k">On Schedule</div><div class="v green">${onSched.length}</div><div class="sub">of ${active.length} active</div></div>
-      </div>
-
-      ${(() => { const n = portfolioNet(); const c = n.net >= 0 ? "#28b478" : "#dc5050";
-        return `<div class="panel mb" data-goto="money" style="cursor:pointer;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div><div class="mono muted" style="font-size:10px;letter-spacing:.04em">💰 TRUE NET / MO</div><div style="font-size:26px;font-weight:900;color:${c}">${money0(n.net)}</div></div>
-          <div class="mono muted" style="font-size:11px;flex:1;min-width:180px">Gross ${money0(n.gross)} − exp ${money0(n.exp)} − debt ${money0(n.debt)}<br><span style="${n.vacant ? "color:#e0913a" : ""}">${n.occPct}% occupied · ${n.vacant} vacant</span></div>
-          <span class="mono muted">details ›</span></div>`; })()}
-
-      <div class="grid cols-2">
-        <div class="panel">
-          <div class="panel-title"><span class="n">🔥</span> Today's Top 5</div>
-          ${top.length ? top.map(taskRow).join("") : `<div class="empty">No open priorities. 🎉</div>`}
-          <button class="btn sm mt" data-add-task>+ Add task</button>
-        </div>
-        <div class="panel">
-          <div class="flex between"><div class="panel-title" style="margin:0"><span class="n" style="color:var(--red)">⚠</span> Needs Attention</div><span class="badge">${attention.length}</span></div>
-          <div class="mt">${attention.length ? attention.map((p) => projLine(p)).join("") : `<div class="empty">Everything green. ✈</div>`}</div>
+    <div class="view view-wide">
+      <div class="view-head">
+        <div><div class="eyebrow">SSH Development · COO</div><h1>Command Center</h1></div>
+        <div class="flex" style="gap:10px;flex-wrap:wrap">
+          <div class="meta">${esc(fmtLong(todayDate()))}</div>
+          <div class="scope-row">${scopes}</div>
         </div>
       </div>
 
-      <div class="grid cols-2 mt">
-        <div class="panel">
-          <div class="panel-title"><span class="n">⏳</span> Waiting On</div>
-          ${["city", "consultant", "contractor"].map((k) => { const g = waitGroup(k); return g.length ? `<div class="mono muted" style="font-size:10px;letter-spacing:.04em;margin:8px 0 2px">${WAITING_LABELS[k].toUpperCase()}</div>${g.map((p) => projLine(p, `<span class="muted">${esc(p.bottleneck || "")}</span>`)).join("")}` : ""; }).join("") || `<div class="empty">Not blocked on anyone. 🙌</div>`}
-          ${calls.length ? `<div class="mono muted mt" style="font-size:10.5px">📞 Call today: ${calls.map((p) => esc(p.name)).join(", ")}</div>` : ""}
+      <div class="dash-stack">
+        <div class="dash-tiles">
+          ${dashTile({ k: "Active builds", v: active.length, sub: "in motion", goto: "builds", tip: "Projects in the active build phase." })}
+          ${dashTile({ k: "Blocked", v: blocked.length, sub: blocked.length ? [...new Set(blocked.map((p) => p.waitingOn))].join(" · ") : "nobody", tone: blocked.length ? "red" : "", goto: "builds", tip: "Waiting on the city, a contractor, a consultant or a tenant." })}
+          ${dashTile({ k: "Overdue tasks", v: overdue.length, sub: "past due date", tone: overdue.length ? "red" : "", goto: "horizon", tip: "Open tasks whose due date has passed." })}
+          ${dashTile({ k: "Stale 7d+", v: stale.length, sub: "no field update", tone: stale.length ? "amber" : "", goto: "builds", tip: "No status logged in over a week." })}
+          ${dashTile({ k: "Draws pending", v: draws.total ? money0(draws.total) : "—", sub: draws.list.length ? "gated on inspection" : "none gated", tone: draws.total ? "amber" : "", goto: "builds", tip: "Construction draws waiting on an inspection or approval." })}
+          ${dashTile({ k: "Doors in build", v: stab.newUnits, sub: stab.upside ? `+${money0(stab.upside)}/mo` : "none planned", tone: "green", goto: "performance", tip: `New doors under development at ${money0(stab.unitRent)}/mo each.` })}
         </div>
-        <div class="panel">
-          <div class="panel-title"><span class="n">📅</span> Upcoming</div>
-          ${upc.length ? upc.slice(0, 8).map((u) => { const dm = dueMeta(u.date); return `<div class="row"${u.id ? ` data-open-project="${u.id}" style="cursor:pointer"` : ""}><div class="body"><div class="t" style="font-size:12.5px">${esc(u.label)}</div><div class="m">${u.type ? `<span class="tag">${esc(u.type)}</span>` : ""}${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}</div></div></div>`; }).join("") : `<div class="empty">Nothing scheduled in the next 45 days.</div>`}
+
+        <div class="dash-split">
+          ${dashCard("Needs you today",
+            attention.length
+              ? attention.slice(0, 6).map(attentionRow).join("")
+              : `<div class="empty">Nothing is waiting on you. ✈</div>`,
+            { alert: true, right: `<span class="dash-count">${attention.length}</span>` })}
+
+          ${dashCard("Next 60 days",
+            deadlines.length
+              ? deadlines.slice(0, 8).map(deadlineRow).join("")
+              : `<div class="empty">Nothing scheduled in the next 60 days.</div>`)}
+        </div>
+
+        ${dashCard(`Build schedule · ${ganttMonths(win)[0]} ${win.start.getFullYear()} → ${ganttMonths(win)[11]} ${addMonths(win.start, 11).getFullYear()}`,
+          ganttBlock(win, gantt, dashFilter),
+          { right: `<div class="flex" style="gap:12px;flex-wrap:wrap">
+              <div class="dash-legend">
+                <i><span class="sw" style="background:var(--st-blue)"></span>permitting</i>
+                <i><span class="sw" style="background:var(--brass)"></span>construction</i>
+                <i><span class="sw" style="background:var(--st-green)"></span>lease-up</i>
+              </div>
+              ${chipRow(filters)}
+            </div>` })}
+
+        ${dashCard("Project status by property", `
+          <div class="dash-table-head">
+            <div>Property</div><div>Phase</div><div>Progress</div>
+            <div style="text-align:right">Rent now</div><div style="text-align:right">Stabilized</div><div style="text-align:right">Health</div>
+          </div>
+          ${rows.length ? rows.map((r) => `
+            <div class="dash-table-row" data-open-project="${r.id}">
+              <div class="col-name">
+                <div class="pname">${esc(r.name)}</div>
+                <div class="pmeta">${esc([r.city, r.units].filter(Boolean).join(" · "))}</div>
+              </div>
+              <div class="col-phase"><span class="phase-chip" style="background:${r.phaseBg};color:${r.phaseFg}">${esc(r.phase)}</span></div>
+              <div class="col-progress">
+                ${dashMeter(r.pct, r.hColor)}
+                <div class="pstep">${esc(r.step)}</div>
+              </div>
+              <div class="dash-num col-rent"><span class="dash-col-label">rent now </span>${esc(r.rent)}</div>
+              <div class="dash-num brass col-stab"><span class="dash-col-label">stabilized </span>${esc(r.stab)}</div>
+              <div class="dash-health col-health" style="color:${r.hColor}">${esc(r.health)}</div>
+            </div>`).join("")
+            : `<div class="empty">No properties in this scope.</div>`}`,
+          { right: `<div class="dash-card-note">${rows.length} ${rows.length === 1 ? "property" : "properties"} · sorted by capital at risk</div>` })}
+
+        <div class="flex" style="gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="btn sm" data-add-task>+ Add task</button>
+          <button class="btn sm ghost" data-goto="now">Focus mode →</button>
+          <button class="btn sm ghost" data-goto="builds">Open all projects →</button>
         </div>
       </div>
-
-      <div class="mt" style="text-align:center"><button class="btn sm ghost" data-goto="builds">Open all projects →</button></div>
     </div>`;
   },
   mount(root) {
-    wireTaskRows(root);
-    root.querySelectorAll("[data-add-task]").forEach((el) => el.addEventListener("click", () => editTask()));
-    root.querySelectorAll("[data-one-done]").forEach((el) => el.addEventListener("click", () => { toggleTask(el.dataset.oneDone); toast("Done. 🎯"); }));
-    root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
-    root.querySelectorAll("[data-open-project]").forEach((el) => el.addEventListener("click", () => { const id = el.dataset.openProject; const p = state.properties.find((x) => x.id === id); selectedProp = id; projFilter = p ? propPhase(p) : null; go("builds"); }));
+    wireDashboard(root);
+    root.querySelectorAll("[data-dash-scope]").forEach((el) =>
+      el.addEventListener("click", () => { dashScope = el.dataset.dashScope; render(); }));
+    root.querySelectorAll("[data-dash-filter]").forEach((el) =>
+      el.addEventListener("click", () => { dashFilter = el.dataset.dashFilter; render(); }));
   },
 };
 
-// ── Investor Overview — the "Dad" profile: big picture, read-only ────────────
+// Shared wiring for both dashboards — every destination the old screens had.
+function wireDashboard(root) {
+  wireTaskRows(root);
+  root.querySelectorAll("[data-add-task]").forEach((el) => el.addEventListener("click", () => editTask()));
+  root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", () => go(el.dataset.goto)));
+  root.querySelectorAll("[data-edit-cash]").forEach((el) => el.addEventListener("click", () => editCashEvent(el.dataset.editCash)));
+  root.querySelectorAll("[data-open-project]").forEach((el) => el.addEventListener("click", (ev) => {
+    if (ev.target.closest("[data-edit-task],[data-toggle],[data-goto],[data-edit-cash]")) return;
+    const id = el.dataset.openProject;
+    const p = state.properties.find((x) => x.id === id);
+    selectedProp = id;
+    projFilter = p ? propPhase(p) : null;
+    go("builds");
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  2a · INVESTOR OVERVIEW — the quiet view (Dad)
+//  Four blocks, three numbers. Everything else lives one click away behind the
+//  Detail expander — nothing from the old overview was removed.
+// ─────────────────────────────────────────────────────────────────────────────
 VIEWS.investor = {
   render() {
-    const managed = managedProjects();
-    const builds = managed.filter((p) => propPhase(p) === "active");
-    const scOf = (p) => scheduleMetrics(p);
-    const onT = builds.filter((p) => { const s = scOf(p).status; return !s || s.label === "On track" || s.label === "Complete"; }).length;
-    const beh = builds.length - onT;
-    const allGood = beh === 0;
+    const cap = portfolioCapital();
     const n = portfolioNet();
+    const stab = stabilizedRent();
+    const net = stabilizedNet();
+    const attention = attentionItems();
+    // Buildings only — "Mother's REP Status" and anything else flagged
+    // nonConstruction is real work, but it isn't a project on a site.
+    const managed = managedProjects().filter((p) => !p.nonConstruction);
+    const holdings = state.properties.filter((p) => !p.nonConstruction);
+    const inMotion = holdings.filter((p) => propScope(p) === "inmotion");
+    const builds = managed.filter((p) => propPhase(p) === "active");
+    const mgmt = mgmtFee(), total = n.net - mgmt;
     const cash = cashSchedule();
     const upcOut = cash.rows.filter((r) => cashSigned(r.e) < 0 && r.e.status !== "done").slice(0, 6);
-    const progressOf = (p) => { const sc = scOf(p); return Math.round((sc.idx / Math.max(1, sc.n - 1)) * 100); };
-    const mgmt = mgmtFee(), total = n.net - mgmt;
+    const cal = deadlineFeed(30);
+    const refis = refiLedger();
+    const sub = drawSubject();
+    const top = attention.slice(0, 3);
+
+    const doorCount = holdings.reduce((s, p) => s + (Number(p.units) || 0), 0);
+    const headline = top.length
+      ? `${top.length === 1 ? "One thing needs" : `${top.length} things need`} you this week. Everything else is on schedule.`
+      : "Nothing needs you this week. Everything is on schedule.";
+
+    const money = (v) => (Math.abs(v) >= 1000000 ? "$" + (v / 1000000).toFixed(1) + "M" : money0(v));
+    const shortK = (v) => (v < 0 ? "−" : "+") + "$" + Math.round(Math.abs(v) / 1000) + "k";
+
     return `
-    <div class="view">
-      <div class="view-head"><div><div class="eyebrow">SSH Development · Investor</div><h1>Overview</h1></div>
-        <div class="meta">${esc(fmtLong(todayDate()))}</div></div>
-
-      <div class="panel mb" style="border:1.5px solid ${allGood ? "#28b47855" : "#e0913a55"};background:${allGood ? "#28b4781a" : "#e0913a1a"}">
-        <div style="font-size:16px;font-weight:800">${allGood ? "🟢 Everything on track" : `🟡 ${beh} project${beh > 1 ? "s" : ""} need attention`}</div>
-        <div class="muted" style="font-size:12px;margin-top:2px">${builds.length} active build${builds.length !== 1 ? "s" : ""} · ${onT} on schedule${beh ? ` · ${beh} behind` : ""}</div>
+    <div class="view view-wide">
+      <div class="quiet-head">
+        <div>
+          <div class="eyebrow">SSH Development · ${esc(fmtLong(todayDate()))}</div>
+          <h1>${esc(headline)}</h1>
+        </div>
+        <div class="quiet-figures">
+          <div class="quiet-figure" title="Sum of every property's current value">
+            <div class="k">Portfolio</div>
+            <div class="v">${esc(money(cap.value))}</div>
+            <div class="sub">${holdings.length} properties · ${doorCount} doors</div>
+          </div>
+          <div class="quiet-figure" title="Value ${esc(money0(cap.value))} less debt ${esc(money0(cap.debt))}">
+            <div class="k">Your equity</div>
+            <div class="v">${esc(money(cap.equity))}</div>
+            <div class="sub">${cap.ltvPct}% loan-to-value</div>
+          </div>
+          <div class="quiet-figure" title="${esc(money0(stab.today))} collected of a ${esc(money0(stab.target))} stabilized target">
+            <div class="k">Rent collected</div>
+            <div class="v" style="color:var(--brass)">${stab.pct}%</div>
+            <div class="sub">of the stabilized target</div>
+          </div>
+        </div>
       </div>
 
-      <div class="panel mb">
-        <div class="panel-title"><span class="n">💰</span> Monthly Net</div>
-        <div class="flex between" style="padding:5px 0;font-size:13.5px"><span>Net from properties</span><span class="mono" style="font-weight:700;color:${n.net >= 0 ? "#28b478" : "#dc5050"}">${n.net < 0 ? "−" : ""}${money0(Math.abs(n.net))}</span></div>
-        <div class="flex between" style="padding:5px 0;font-size:13.5px;border-top:1px dashed var(--line)"><span>Management (Alex)</span><span class="mono" style="font-weight:700;color:#dc5050">−${money0(mgmt)}</span></div>
-        <div class="flex between" style="padding:7px 0;border-top:1px solid var(--line);font-size:15px;font-weight:800"><span>Total net / mo</span><span class="mono" style="color:${total >= 0 ? "#28b478" : "#dc5050"}">${total < 0 ? "−" : ""}${money0(Math.abs(total))}</span></div>
-        ${n.vacant ? `<div class="flex between" style="padding:5px 0;font-size:12.5px;color:#e0913a"><span>🔑 ${n.vacant} vacant unit${n.vacant > 1 ? "s" : ""} — fill for</span><span class="mono" style="font-weight:700">+${money0(n.vacantRent)}/mo</span></div>` : ""}
-        <div class="mono muted" style="font-size:10.5px;margin-top:4px">${money0(total * 12)}/yr · properties are cash-negative while ${builds.length} value-add projects are mid-build; flips positive as ADUs & refis complete.</div>
-      </div>
+      <div class="dash-stack">
+        <div class="quiet-card">
+          <div class="h">Needs you</div>
+          <div style="margin-top:18px">
+            ${top.length ? top.map((a) => {
+              const red = a.color === "var(--st-red)";
+              const hook = a.taskId ? ` data-edit-task="${a.taskId}"` : a.propId ? ` data-open-project="${a.propId}"` : a.cashId ? ` data-goto="cashflow"` : "";
+              return `<div class="quiet-task ${red ? "red" : ""}" title="${esc(a.tip || "")}">
+                ${a.taskId ? `<div class="dash-check" data-toggle="${a.taskId}" title="Mark done">✓</div>` : ""}
+                <div class="body" style="flex:1;min-width:0;cursor:pointer"${hook}>
+                  <div class="t">${esc(a.title)}</div>
+                  <div class="s">${esc(a.sub)}</div>
+                </div>
+                <div class="when" style="color:${a.color}">${esc(a.flag)}</div>
+              </div>`;
+            }).join("") : `<div class="empty">Nothing needs you. 🎉</div>`}
+          </div>
+        </div>
 
-      <div class="grid cols-3 mb">
-        <div class="stat"><div class="k">Property Net / mo</div><div class="v ${n.net >= 0 ? "green" : "red"}" style="font-size:20px">${n.net < 0 ? "−" : ""}${money0(Math.abs(n.net))}</div><div class="sub">before mgmt</div></div>
-        <div class="stat"><div class="k">Occupancy</div><div class="v ${n.occPct >= 90 ? "green" : "amber"}">${n.occPct}%</div><div class="sub">${n.occupied}/${n.doors} units${n.vacant ? ` · ${n.vacant} vacant` : ""}</div></div>
-        <div class="stat"><div class="k">Cash After Plans</div><div class="v ${cash.end >= 0 ? "green" : "red"}" style="font-size:20px">${money0(cash.end)}</div><div class="sub">low ${money0(cash.low.bal)}</div></div>
-      </div>
+        <div class="quiet-card">
+          <div class="h" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+            Where the portfolio is headed
+            <span class="sub">once the builds finish and lease up</span>
+          </div>
+          <div class="flex" style="gap:32px;margin-top:22px;align-items:center;flex-wrap:wrap">
+            <div style="flex:1;min-width:280px">
+              <div class="bridge">
+                <div class="now" style="width:${stab.pct}%" title="Rent collected today across ${doorCount} doors">${esc(money0(stab.today))}</div>
+                ${stab.upside ? `<div class="gap" title="${stab.newUnits} new doors at ${esc(money0(stab.unitRent))}/mo">+${esc(money0(stab.upside))}</div>` : ""}
+              </div>
+              <div class="bridge-legend">
+                <span>Rent today</span><span>Stabilized · ${esc(money0(stab.target))} / mo</span>
+              </div>
+            </div>
+            <div style="width:220px">
+              <div style="font-size:13px;color:var(--dash-dim)">Monthly cash flow</div>
+              <div class="flex" style="gap:10px;align-items:baseline;margin-top:6px">
+                <span class="mono" style="font-size:20px;font-weight:700;color:${net.now >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(shortK(net.now))}</span>
+                <span style="color:var(--dash-faint)">→</span>
+                <span class="mono" style="font-size:20px;font-weight:700;color:${net.then >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(shortK(net.then))}</span>
+              </div>
+              <div style="font-size:12px;color:var(--dash-faint);margin-top:6px">${stab.newUnits ? `Negative while ${stab.newUnits} doors are mid-build.` : "Before management fee."}</div>
+            </div>
+          </div>
+        </div>
 
-      <div class="panel mb">
-        <div class="panel-title"><span class="n">🏗</span> Current Builds &amp; Progress</div>
-        ${builds.length ? builds.map((p) => { const sc = scOf(p), pct = progressOf(p);
-          return `<div style="padding:9px 0;border-bottom:1px solid var(--line)">
-            <div class="flex between" style="align-items:center"><div style="font-weight:600;font-size:13.5px">${HEALTH[projHealth(p)].dot} ${esc(p.name)}</div>${statusPill(sc)}</div>
-            <div class="bar" style="margin-top:5px"><span class="ok" style="width:${pct}%"></span></div>
-            <div class="mono muted" style="font-size:10.5px;margin-top:4px">${esc(sc.stages[sc.idx] || "")} · ${pct}%${p.nextMilestone ? ` · next: ${esc(p.nextMilestone)}` : ""}${p.targetDate ? ` · done ${fmtDate(p.targetDate)}` : ""}</div>
-          </div>`; }).join("") : `<div class="empty">No active builds.</div>`}
-      </div>
+        <div class="quiet-card">
+          <div class="h" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+            Projects
+            <span class="sub mono">${inMotion.length} in motion · ${inMotion.filter(isBlocked).length} blocked · ${holdings.length - inMotion.length} stabilized</span>
+          </div>
+          <div class="quiet-projects" style="margin-top:20px">
+            ${inMotion.length ? inMotion.map((p) => {
+              const sc = scheduleMetrics(p);
+              const pct = Math.round((sc.idx / Math.max(1, sc.n - 1)) * 100);
+              const c = HEALTH_VAR[projHealth(p)];
+              return `<div class="quiet-project" data-open-project="${p.id}" title="${esc(p.nextMilestone || p.nextStep || "")}">
+                <div class="flex" style="gap:7px">
+                  <span style="width:8px;height:8px;border-radius:50%;background:${c};flex:0 0 auto"></span>
+                  <span class="n">${esc(p.name)}</span>
+                </div>
+                <div style="margin-top:14px">${dashMeter(pct + "%", c)}</div>
+                <div class="s">${esc(p.bottleneck || sc.stages[sc.idx] || dashPhase(p).label)}</div>
+              </div>`;
+            }).join("") : `<div class="empty">No active projects.</div>`}
+          </div>
+        </div>
 
-      <div class="panel">
-        <div class="panel-title"><span class="n">💸</span> Money Going Out — next</div>
-        ${upcOut.length ? upcOut.map((r) => { const t = cashType(r.e.type), dm = dueMeta(r.e.date);
-          return `<div class="row"><div class="body"><div class="t" style="font-size:13px">${t.icon} ${esc(t.label)}${propName(r.e.propertyId) ? ` · ${esc(propName(r.e.propertyId))}` : ""}${r.e.note ? ` — ${esc(r.e.note)}` : ""}</div><div class="m">${dm ? `<span class="pill-due ${dm.cls}">${dm.text}</span>` : ""}</div></div><div class="mono" style="font-weight:800;color:#dc5050;flex:0 0 auto">−${money0(Number(r.e.amount) || 0)}</div></div>`; }).join("") : `<div class="empty">Nothing scheduled to go out yet.</div>`}
+        <details class="quiet-detail">
+          <summary>
+            <span class="sum-t">Detail — money, financing, calendar, budgets</span>
+            <span class="sum-h">open when you need it ▾</span>
+          </summary>
+
+          <div class="dash-split thirds" style="margin-top:22px">
+            <div class="detail-col">
+              <div class="k">Financing &amp; refinance</div>
+              ${refis.length ? refis.map((f) => `
+                <div class="detail-row" data-edit-cash="${f.e.id}" style="cursor:pointer">
+                  <div><div class="n">${esc(f.name)}</div><div class="w">${esc(f.when)}</div></div>
+                  <div class="a" style="color:${f.inflow ? "var(--st-green)" : "var(--st-red)"}">${f.inflow ? "+" : "−"}${esc(money0(Math.abs(f.amt)))}</div>
+                </div>`).join("") : `<div class="empty">No financing events scheduled.</div>`}
+            </div>
+
+            <div class="detail-col">
+              <div class="k">Calendar · next 30 days</div>
+              ${cal.length ? cal.slice(0, 8).map((d) => `
+                <div class="detail-row">
+                  <div><div class="n">${esc(d.label)}</div><div class="w">${esc(d.in)}</div></div>
+                  <div class="a" style="color:var(--brass)">${esc(d.date)}</div>
+                </div>`).join("") : `<div class="empty">Nothing in the next 30 days.</div>`}
+            </div>
+
+            <div class="detail-col">
+              <div class="k">Budget · draw schedule</div>
+              ${sub ? `
+                <div class="split-bar">
+                  <span style="width:${sub.paidPct.toFixed(1)}%;background:var(--st-green)" title="Paid ${esc(money0(sub.paid))}"></span>
+                  <span style="width:${sub.gatedPct.toFixed(1)}%;background:var(--brass)" title="Gated ${esc(money0(sub.gated))}"></span>
+                  <span style="flex:1;background:var(--dash-line-soft)" title="Future ${esc(money0(sub.future))}"></span>
+                </div>
+                <div class="split-legend">
+                  <span>paid ${Math.round(sub.paidPct)}%</span>
+                  <span>gated ${Math.round(sub.gatedPct)}%</span>
+                  <span>future ${Math.round(sub.futurePct)}%</span>
+                </div>
+                <div style="font-size:12px;color:var(--dash-dim);margin-top:14px;text-wrap:pretty">
+                  ${esc(sub.name)} · ${esc(money0(sub.contract))} contract.${sub.gated ? ` ${esc(money0(sub.gated))} releases when the next inspection passes.` : ""}
+                </div>`
+              : `<div class="empty">No live draw schedule.</div>`}
+            </div>
+          </div>
+
+          <div class="dash-split" style="margin-top:26px">
+            <div class="detail-col">
+              <div class="k">Monthly net</div>
+              <div class="detail-row"><div class="n">Net from properties</div>
+                <div class="a" style="color:${n.net >= 0 ? "var(--st-green)" : "var(--st-red)"}">${n.net < 0 ? "−" : ""}${esc(money0(Math.abs(n.net)))}</div></div>
+              <div class="detail-row"><div class="n">Management (Alex)</div>
+                <div class="a" style="color:var(--st-red)">−${esc(money0(mgmt))}</div></div>
+              <div class="detail-row"><div class="n" style="font-weight:700">Total net / mo</div>
+                <div class="a" style="color:${total >= 0 ? "var(--st-green)" : "var(--st-red)"}">${total < 0 ? "−" : ""}${esc(money0(Math.abs(total)))}</div></div>
+              ${n.vacant ? `<div class="detail-row"><div class="n">🔑 ${n.vacant} vacant unit${n.vacant > 1 ? "s" : ""} — fill for</div>
+                <div class="a" style="color:var(--brass)">+${esc(money0(n.vacantRent))}/mo</div></div>` : ""}
+              <div class="w" style="margin-top:10px;text-wrap:pretty">${esc(money0(total * 12))}/yr · ${n.occPct}% occupied across ${n.doors} doors. Properties run cash-negative while ${builds.length} value-add project${builds.length === 1 ? " is" : "s are"} mid-build; that flips as the ADUs finish and the refis complete.</div>
+            </div>
+
+            <div class="detail-col">
+              <div class="k">Money going out — next</div>
+              ${upcOut.length ? upcOut.map((r) => {
+                const t = cashType(r.e.type), dm = dueMeta(r.e.date);
+                return `<div class="detail-row" data-edit-cash="${r.e.id}" style="cursor:pointer">
+                  <div><div class="n">${t.icon} ${esc(t.label)}${propName(r.e.propertyId) ? " · " + esc(propName(r.e.propertyId)) : ""}</div>
+                    <div class="w">${esc(r.e.note || "")}${dm ? (r.e.note ? " · " : "") + esc(dm.text) : ""}</div></div>
+                  <div class="a" style="color:var(--st-red)">−${esc(money0(Number(r.e.amount) || 0))}</div>
+                </div>`;
+              }).join("") : `<div class="empty">Nothing scheduled to go out yet.</div>`}
+              <div class="w" style="margin-top:10px">Cash after everything scheduled clears: <span style="color:${cash.end >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(money0(cash.end))}</span> · lowest point ${esc(money0(cash.low.bal))}</div>
+            </div>
+          </div>
+
+          <div class="flex" style="gap:8px;margin-top:22px;flex-wrap:wrap">
+            <button class="btn sm ghost" data-goto="money">True Net →</button>
+            <button class="btn sm ghost" data-goto="cashflow">Cash Flow →</button>
+            <button class="btn sm ghost" data-goto="builds">Projects →</button>
+          </div>
+        </details>
       </div>
     </div>`;
   },
-  mount() {},
+  mount(root) { wireDashboard(root); },
 };
 
 // ── Personal · Contractor Academy (CSLB "B" apprenticeship curriculum) ───────
@@ -3397,6 +3965,7 @@ async function boot() {
   try { await applyWashingtonDraws(); } catch (e) { console.warn("wash draws skipped", e); }
   try { await applyWashingtonDates(); } catch (e) { console.warn("wash dates skipped", e); }
   try { await applyDevCashEvents(); } catch (e) { console.warn("dev cash skipped", e); }
+  try { await applyPlannedUnits(); } catch (e) { console.warn("planned units skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }

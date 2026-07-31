@@ -591,3 +591,47 @@ export async function applyVacancies() {
   localStorage.setItem("sshcc:vacancy-v1", "1");
   console.log("Vacancy loaded.");
 }
+
+// ── Planned new doors (ADUs / JADUs / garage conversions) ────────────────────
+// `plannedUnits` + `unitsReadyDate` already exist on the property record and
+// already drive projectIncome() — they were simply never populated, so the
+// "rent today → stabilized" figure on the dashboard read as zero upside.
+//
+// Every count below comes from data already in this repo: each property's own
+// `devPlan` text and the dated construction events in DEV_CASH. Nothing is
+// invented, and the per-unit rent is the app's own `avgUnitRent` assumption
+// (Portfolio Performance → Assumptions), not a number hard-coded here.
+//
+// Properties whose development scope isn't decided yet (the R3 land parcels —
+// Fidel, Nance, Tweedy) are deliberately left blank rather than guessed. Fill
+// them in from Edit deal once the feasibility studies land.
+const PLANNED_UNITS = [
+  { id: "prop-washington",       units: 1, ready: "2026-09-30", why: "749 sqft ADU + 180 sqft addition" },
+  { id: "prop-spry",             units: 1, ready: "2026-11-15", why: "749 sqft 2x2 ADU" },
+  { id: "prop-muller",           units: 2, ready: "2026-12-20", why: "2 JADUs planned" },
+  { id: "prop-140-12th",         units: 1, ready: "2027-06-03", why: "Seal Beach ADU" },
+  { id: "prop-arrington-10516",  units: 2, ready: "2027-06-10", why: "4 ADUs across both buildings" },
+  { id: "prop-arrington-10522",  units: 2, ready: "2027-06-10", why: "4 ADUs across both buildings" },
+  { id: "prop-inglewood",        units: 2, ready: "2027-06-29", why: "2 garage conversions" },
+  { id: "prop-painter-11912",    units: 3, ready: "2027-07-18", why: "3 ADUs" },
+];
+export async function applyPlannedUnits() {
+  if (localStorage.getItem("sshcc:planned-units-v1")) return;
+  const props = DB.getAll("properties");
+  if (!props.length) return;
+  let n = 0;
+  for (const u of PLANNED_UNITS) {
+    const p = props.find((x) => x.id === u.id);
+    if (!p) continue;
+    // Never overwrite a figure already entered by hand.
+    const blank = (v) => v === undefined || v === null || v === "";
+    const patch = {};
+    if (blank(p.plannedUnits)) patch.plannedUnits = u.units;
+    if (blank(p.unitsReadyDate)) patch.unitsReadyDate = u.ready;
+    if (!Object.keys(patch).length) continue;
+    await DB.upsert("properties", { ...p, ...patch });
+    n++;
+  }
+  localStorage.setItem("sshcc:planned-units-v1", "1");
+  console.log(`Planned new doors set on ${n} properties.`);
+}
