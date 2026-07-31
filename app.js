@@ -706,6 +706,40 @@ function stabilizedNet() {
   return { now: n.net, then: n.net + s.upside, upside: s.upside };
 }
 
+// Dated stabilization path for the investor view. Each planned build adds its
+// new doors' rent (avgUnitRent apiece, operating costs held flat — the same
+// convention stabilizedNet() uses) on the day it's ready to lease, so Dad can
+// see the portfolio's net/month after each property finishes and the exact date
+// it lands. Steps are ordered by completion date; `stabilized` is the run-rate
+// once every planned door is built. Properties whose development scope isn't set
+// yet (no plannedUnits or no unitsReadyDate) are left out rather than guessed.
+function stabilizationTimeline() {
+  const baseNet = portfolioNet().net;
+  const unitRent = getAssumptions().avgUnitRent;
+  const builds = state.properties
+    .filter((p) => (Number(p.plannedUnits) || 0) > 0 && parseISO(p.unitsReadyDate))
+    .map((p) => ({ id: p.id, name: p.name, units: Number(p.plannedUnits) || 0,
+      date: p.unitsReadyDate, d: parseISO(p.unitsReadyDate), add: (Number(p.plannedUnits) || 0) * unitRent }))
+    .sort((a, b) => a.d - b.d);
+
+  // Running net as each build completes, in date order.
+  let running = baseNet;
+  const steps = builds.map((b) => { running += b.add; return { ...b, net: running }; });
+
+  // Net at a future horizon = base + every door ready by then.
+  const netBy = (monthsAhead) => {
+    const H = addMonths(todayDate(), monthsAhead);
+    return baseNet + builds.filter((b) => b.d <= H).reduce((s, b) => s + b.add, 0);
+  };
+
+  const doorsTotal = builds.reduce((s, b) => s + b.units, 0);
+  const last = builds.length ? builds[builds.length - 1] : null;
+  return { baseNet, unitRent, steps, doorsTotal,
+    now: baseNet, m6: netBy(6), y1: netBy(12),
+    stabilized: baseNet + doorsTotal * unitRent,
+    lastDate: last ? last.date : null, lastD: last ? last.d : null };
+}
+
 function isStale(p) { return !p.lastUpdate || (Date.now() - p.lastUpdate) > 7 * DAY; }
 function isBlocked(p) { return ["city", "contractor", "consultant", "tenant"].includes(p.waitingOn); }
 function isPermitting(p) {
@@ -1180,7 +1214,7 @@ VIEWS.investor = {
     const n = portfolioNet();
     const stab = stabilizedRent();
     const net = stabilizedNet();
-    const attention = attentionItems();
+    const tl = stabilizationTimeline();
     // Buildings only — "Mother's REP Status" and anything else flagged
     // nonConstruction is real work, but it isn't a project on a site.
     const managed = managedProjects().filter((p) => !p.nonConstruction);
@@ -1193,15 +1227,15 @@ VIEWS.investor = {
     const cal = deadlineFeed(30);
     const refis = refiLedger();
     const sub = drawSubject();
-    const top = attention.slice(0, 3);
 
     const doorCount = holdings.reduce((s, p) => s + (Number(p.units) || 0), 0);
-    const headline = top.length
-      ? `${top.length === 1 ? "One thing needs" : `${top.length} things need`} you this week. Everything else is on schedule.`
-      : "Nothing needs you this week. Everything is on schedule.";
-
     const money = (v) => (Math.abs(v) >= 1000000 ? "$" + (v / 1000000).toFixed(1) + "M" : money0(v));
     const shortK = (v) => (v < 0 ? "−" : "+") + "$" + Math.round(Math.abs(v) / 1000) + "k";
+    const monthYear = (d) => (d ? d.toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "");
+
+    const headline = tl.steps.length
+      ? `Your net income grows from ${shortK(tl.now)} to ${shortK(tl.stabilized)}/mo as ${tl.steps.length} ${tl.steps.length === 1 ? "build finishes" : "builds finish"} — fully stabilized ${monthYear(tl.lastD)}.`
+      : "Every property is stabilized — your income is at full run-rate.";
 
     return `
     <div class="view view-wide">
@@ -1231,21 +1265,37 @@ VIEWS.investor = {
 
       <div class="dash-stack">
         <div class="quiet-card">
-          <div class="h">Needs you</div>
-          <div style="margin-top:18px">
-            ${top.length ? top.map((a) => {
-              const red = a.color === "var(--st-red)";
-              const hook = a.taskId ? ` data-edit-task="${a.taskId}"` : a.propId ? ` data-open-project="${a.propId}"` : a.cashId ? ` data-goto="cashflow"` : "";
-              return `<div class="quiet-task ${red ? "red" : ""}" title="${esc(a.tip || "")}">
-                ${a.taskId ? `<div class="dash-check" data-toggle="${a.taskId}" title="Mark done">✓</div>` : ""}
-                <div class="body" style="flex:1;min-width:0;cursor:pointer"${hook}>
-                  <div class="t">${esc(a.title)}</div>
-                  <div class="s">${esc(a.sub)}</div>
-                </div>
-                <div class="when" style="color:${a.color}">${esc(a.flag)}</div>
-              </div>`;
-            }).join("") : `<div class="empty">Nothing needs you. 🎉</div>`}
+          <div class="h" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+            Your income, as each build finishes
+            <span class="sub">net / month · before management fee</span>
           </div>
+
+          <div class="phase-row">
+            ${[["Today", tl.now, fmtLong(todayDate())],
+               ["+6 months", tl.m6, ""],
+               ["+1 year", tl.y1, ""],
+               ["Fully stabilized", tl.stabilized, tl.lastD ? monthYear(tl.lastD) : "now"]
+              ].map(([k, v, when]) => `
+              <div class="phase">
+                <div class="k">${esc(k)}</div>
+                <div class="v" style="color:${v >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(shortK(v))}</div>
+                ${when ? `<div class="s">${esc(when)}</div>` : ""}
+              </div>`).join("")}
+          </div>
+
+          ${tl.steps.length ? `
+          <div class="build-timeline">
+            ${tl.steps.map((b, i) => `
+              <div class="build-step${i === tl.steps.length - 1 ? " last" : ""}" data-open-project="${b.id}" title="Open ${esc(b.name)}">
+                <div class="dot"></div>
+                <div class="when">${esc(fmtDate(b.date))}, ${esc(String(b.d.getFullYear()))}</div>
+                <div class="body">
+                  <div class="t">${esc(b.name)}</div>
+                  <div class="s">+${b.units} door${b.units > 1 ? "s" : ""} leased</div>
+                </div>
+                <div class="net" style="color:${b.net >= 0 ? "var(--st-green)" : "var(--st-red)"}">${esc(shortK(b.net))}<span class="u">/mo</span></div>
+              </div>`).join("")}
+          </div>` : `<div class="empty" style="margin-top:16px">Every planned unit is built and leased. 🎉</div>`}
         </div>
 
         <div class="quiet-card">

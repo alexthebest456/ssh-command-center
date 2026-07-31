@@ -901,6 +901,62 @@ svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
 }
 .bridge-legend { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--dash-dim); margin-top: 10px; }
 
+/* Income phases: today → +6mo → +1yr → fully stabilized */
+.phase-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin-top: 20px; margin-bottom: 4px;
+}
+.phase {
+  border: 1px solid var(--dash-line-soft); border-radius: 10px;
+  padding: 14px 16px; background: var(--dash-panel-2);
+}
+.phase .k {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--dash-faint);
+}
+.phase .v { font-family: var(--mono); font-size: 22px; font-weight: 700; margin-top: 8px; }
+.phase .s { font-size: 11.5px; color: var(--dash-dim); margin-top: 4px; }
+.phase:last-child { border-color: var(--brass-line); background: var(--brass-soft); }
+@media (max-width: 760px) { .phase-row { grid-template-columns: repeat(2, 1fr); } }
+
+/* Completion timeline: one row per property, the day it finishes and the
+   portfolio net/month it lands you at. */
+.build-timeline { margin-top: 22px; }
+.build-step {
+  display: flex; align-items: center; gap: 16px; padding: 14px 4px 14px 0;
+  position: relative; cursor: pointer; border-bottom: 1px solid var(--dash-line-soft);
+}
+.build-step:last-child { border-bottom: none; }
+.build-step .dot {
+  width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--brass); box-shadow: 0 0 0 4px var(--brass-soft);
+}
+.build-step.last .dot { background: var(--st-green); box-shadow: 0 0 0 4px rgba(111,191,139,0.15); }
+/* connecting spine between the dots */
+.build-step::before {
+  content: ""; position: absolute; left: 5px; top: 50%; bottom: -1px;
+  width: 1px; background: var(--dash-line);
+}
+.build-step:last-child::before { display: none; }
+.build-step .when {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--brass);
+  white-space: nowrap; width: 88px; flex: 0 0 auto;
+}
+.build-step .body { flex: 1; min-width: 0; }
+.build-step .body .t { font-size: 15px; font-weight: 600; }
+.build-step .body .s { font-size: 12.5px; color: var(--dash-dim); margin-top: 3px; }
+.build-step .net { font-family: var(--mono); font-size: 17px; font-weight: 700; white-space: nowrap; }
+.build-step .net .u { font-size: 11px; color: var(--dash-faint); font-weight: 400; margin-left: 2px; }
+.build-step:hover .body .t { color: var(--brass); }
+@media (max-width: 640px) {
+  .build-step { flex-wrap: wrap; gap: 6px 12px; padding-left: 20px; }
+  .build-step::before { left: 5px; }
+  .build-step .dot { position: absolute; left: 0; top: 20px; }
+  .build-step .when { width: auto; }
+  .build-step .body { flex: 1 1 100%; order: 3; }
+  .build-step .net { margin-left: auto; }
+}
+
 .quiet-projects { display: flex; gap: 10px; flex-wrap: wrap; }
 .quiet-project {
   flex: 1 1 150px; border: 1px solid var(--dash-line-soft); border-radius: 10px;
