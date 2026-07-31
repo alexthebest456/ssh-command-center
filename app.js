@@ -742,10 +742,17 @@ function stabilizationTimeline() {
     })
     .sort((a, b) => a.d - b.d);
 
-  // Running portfolio net + cash-on-cash as each build completes, in date order.
+  // Running portfolio net as each build completes, in date order. Cash-on-cash
+  // is per build: the new units' yearly rent ÷ the cash put into that build
+  // (net of any refinance that returned cash, so a full cash-out reads ∞).
   let running = baseNet;
-  const coc = (net) => (totalInvested ? (net * 12 / totalInvested) * 100 : null);
-  const steps = builds.map((b) => { running += b.add; return { ...b, net: running, coc: coc(running) }; });
+  const steps = builds.map((b) => {
+    running += b.add;
+    const cashDown = -b.cash;                 // + = cash left in the build, − = net cash returned
+    const newAnnualRent = b.add * 12;         // yearly rent the new units add
+    const coc = cashDown > 0 ? (newAnnualRent / cashDown) * 100 : Infinity;
+    return { ...b, net: running, cashDown, newAnnualRent, coc };
+  });
 
   // Net at a future horizon = base + every door ready by then.
   const netBy = (monthsAhead) => {
@@ -758,7 +765,6 @@ function stabilizationTimeline() {
   const last = builds.length ? builds[builds.length - 1] : null;
   return { baseNet, unitRent, steps, doorsTotal, totalInvested,
     now: baseNet, m6: netBy(6), y1: netBy(12), stabilized,
-    cocNow: coc(baseNet), cocStab: coc(stabilized),
     lastDate: last ? last.date : null, lastD: last ? last.d : null };
 }
 
@@ -1320,7 +1326,7 @@ VIEWS.investor = {
               </thead>
               <tbody>
                 ${tl.steps.map((b, i) => {
-                  const pct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%");
+                  const pct = (v) => (v == null ? "—" : !isFinite(v) ? "∞" : (v >= 0 ? "" : "−") + Math.abs(v).toFixed(0) + "%");
                   return `<tr class="build-row${i === tl.steps.length - 1 ? " last" : ""}" data-open-project="${b.id}" title="Open ${esc(b.name)}">
                     <td class="when">${esc(fmtDate(b.date))}, ${esc(String(b.d.getFullYear()))}</td>
                     <td class="prop"><span class="dot"></span><span class="nm">${esc(b.name)}</span><span class="u">${b.totalUnits} units · +${b.planned} new</span></td>
@@ -1336,7 +1342,7 @@ VIEWS.investor = {
           <div class="build-foot">
             <b>Rent in</b> — what each building collects once its new units lease ·
             <b>Cash in/out</b> — one-time build capital (a refinance returns cash) ·
-            <b>Cash-on-cash</b> — portfolio net ÷ ${esc(money0(tl.totalInvested))} cash invested, climbing as the builds fill.
+            <b>Cash-on-cash</b> — the new units' yearly rent ÷ the cash put into that build (a refinance that returns your cash pushes it toward ∞).
           </div>` : `<div class="empty" style="margin-top:16px">Every planned unit is built and leased. 🎉</div>`}
         </div>
 
