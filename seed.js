@@ -618,6 +618,78 @@ export async function applyDealFix() {
   console.log(`Deal corrections applied to ${n} properties.`);
 }
 
+// ── Dated money-out calendar (walked through with the owner) ─────────────────
+// Replaces the single-lump build costs with the real draw schedule per property
+// so the Cash Flow view shows exactly when cash leaves. Totals are unchanged
+// except Seal Beach's ADU (now $200k, four $50k draws). Old lump ids are removed
+// (deleteDoc propagates to Firestore; reconcile runs before this, so nothing is
+// resurrected) and the dated draws written in their place. Also nudges the two
+// Arrington remodel payments to their real Jan 17 date, dates Washington draws
+// 3–5, and sets the confirmed lease-up dates. Idempotent via its guard key.
+const CAL_REMOVE = ["dc-muller-build", "dc-spry-build", "dc-12th-adu", "dc-ing-remodel",
+  "dc-ing-garage", "dc-paint-remodel", "dc-paint-adu", "dc-arr-adu", "dc-arr16-adu"];
+const CAL_ADD = [
+  // Muller — 3 JADU draws
+  { id: "dc-muller-d1", type: "remodel", date: "2026-08-24", propertyId: "prop-muller", amount: 90000, note: "JADU draw 1/3" },
+  { id: "dc-muller-d2", type: "remodel", date: "2026-09-24", propertyId: "prop-muller", amount: 90000, note: "JADU draw 2/3" },
+  { id: "dc-muller-d3", type: "remodel", date: "2026-11-24", propertyId: "prop-muller", amount: 90000, note: "JADU draw 3/3" },
+  // Spry — 4 monthly ADU draws
+  { id: "dc-spry-d1", type: "remodel", date: "2026-09-01", propertyId: "prop-spry", amount: 75000, note: "ADU draw 1/4" },
+  { id: "dc-spry-d2", type: "remodel", date: "2026-10-01", propertyId: "prop-spry", amount: 75000, note: "ADU draw 2/4" },
+  { id: "dc-spry-d3", type: "remodel", date: "2026-11-01", propertyId: "prop-spry", amount: 75000, note: "ADU draw 3/4" },
+  { id: "dc-spry-d4", type: "remodel", date: "2026-12-01", propertyId: "prop-spry", amount: 75000, note: "ADU draw 4/4" },
+  // Seal Beach — ADU is $200k in 4 draws
+  { id: "dc-12th-adu1", type: "remodel", date: "2027-02-01", propertyId: "prop-140-12th", amount: 50000, note: "ADU draw 1/4" },
+  { id: "dc-12th-adu2", type: "remodel", date: "2027-03-01", propertyId: "prop-140-12th", amount: 50000, note: "ADU draw 2/4" },
+  { id: "dc-12th-adu3", type: "remodel", date: "2027-04-01", propertyId: "prop-140-12th", amount: 50000, note: "ADU draw 3/4" },
+  { id: "dc-12th-adu4", type: "remodel", date: "2027-05-01", propertyId: "prop-140-12th", amount: 50000, note: "ADU draw 4/4" },
+  // Inglewood — remodel 25/50/25 then garage 4 draws
+  { id: "dc-ing-rem1", type: "remodel", date: "2026-08-29", propertyId: "prop-inglewood", amount: 75000, note: "remodel 25% down" },
+  { id: "dc-ing-rem2", type: "remodel", date: "2026-09-29", propertyId: "prop-inglewood", amount: 150000, note: "remodel 50%" },
+  { id: "dc-ing-rem3", type: "remodel", date: "2026-10-13", propertyId: "prop-inglewood", amount: 75000, note: "remodel final 25%" },
+  { id: "dc-ing-gar1", type: "remodel", date: "2027-03-29", propertyId: "prop-inglewood", amount: 70000, note: "garage draw 1/4" },
+  { id: "dc-ing-gar2", type: "remodel", date: "2027-04-29", propertyId: "prop-inglewood", amount: 70000, note: "garage draw 2/4" },
+  { id: "dc-ing-gar3", type: "remodel", date: "2027-05-29", propertyId: "prop-inglewood", amount: 70000, note: "garage draw 3/4" },
+  { id: "dc-ing-gar4", type: "remodel", date: "2027-06-29", propertyId: "prop-inglewood", amount: 70000, note: "garage draw 4/4" },
+  // Painter — remodel 3 payments then ADU 4 draws
+  { id: "dc-paint-rem1", type: "remodel", date: "2026-09-01", propertyId: "prop-painter-11912", amount: 30000, note: "remodel 33%" },
+  { id: "dc-paint-rem2", type: "remodel", date: "2026-10-01", propertyId: "prop-painter-11912", amount: 30000, note: "remodel 33%" },
+  { id: "dc-paint-rem3", type: "remodel", date: "2026-11-01", propertyId: "prop-painter-11912", amount: 30000, note: "remodel final" },
+  { id: "dc-paint-adu1", type: "remodel", date: "2027-02-07", propertyId: "prop-painter-11912", amount: 179760, note: "ADU draw 1/4" },
+  { id: "dc-paint-adu2", type: "remodel", date: "2027-03-07", propertyId: "prop-painter-11912", amount: 179760, note: "ADU draw 2/4" },
+  { id: "dc-paint-adu3", type: "remodel", date: "2027-04-07", propertyId: "prop-painter-11912", amount: 179760, note: "ADU draw 3/4" },
+  { id: "dc-paint-adu4", type: "remodel", date: "2027-05-07", propertyId: "prop-painter-11912", amount: 179760, note: "ADU draw 4/4" },
+  // Arrington ADUs — 4 draws each building, construction from Feb 7
+  { id: "dc-arr22-adu1", type: "remodel", date: "2027-02-07", propertyId: "prop-arrington-10522", amount: 64000, note: "ADU draw 1/4" },
+  { id: "dc-arr22-adu2", type: "remodel", date: "2027-03-07", propertyId: "prop-arrington-10522", amount: 64000, note: "ADU draw 2/4" },
+  { id: "dc-arr22-adu3", type: "remodel", date: "2027-04-07", propertyId: "prop-arrington-10522", amount: 64000, note: "ADU draw 3/4" },
+  { id: "dc-arr22-adu4", type: "remodel", date: "2027-05-07", propertyId: "prop-arrington-10522", amount: 64000, note: "ADU draw 4/4" },
+  { id: "dc-arr16-adu1", type: "remodel", date: "2027-02-07", propertyId: "prop-arrington-10516", amount: 64000, note: "ADU draw 1/4" },
+  { id: "dc-arr16-adu2", type: "remodel", date: "2027-03-07", propertyId: "prop-arrington-10516", amount: 64000, note: "ADU draw 2/4" },
+  { id: "dc-arr16-adu3", type: "remodel", date: "2027-04-07", propertyId: "prop-arrington-10516", amount: 64000, note: "ADU draw 3/4" },
+  { id: "dc-arr16-adu4", type: "remodel", date: "2027-05-07", propertyId: "prop-arrington-10516", amount: 64000, note: "ADU draw 4/4" },
+];
+const CAL_REDATE = { "dc-arr-remodel": "2027-01-17", "dc-arr16-remodel": "2027-01-17" };
+const CAL_DRAW_DATES = { "draw-wash-3": "2026-08-12", "draw-wash-4": "2026-08-26", "draw-wash-5": "2026-09-09" };
+const CAL_READY = {
+  "prop-washington": "2026-10-21", "prop-muller": "2026-12-11", "prop-spry": "2027-01-01",
+  "prop-arrington-10516": "2027-07-07", "prop-arrington-10522": "2027-07-07", "prop-140-12th": "2027-07-01",
+  "prop-inglewood": "2027-07-29", "prop-painter-11912": "2027-07-07",
+};
+export async function applyDrawCalendar() {
+  if (localStorage.getItem("sshcc:draw-calendar-v1")) return;
+  const ex = DB.getAll("cashEvents");
+  for (const id of CAL_REMOVE) { if (ex.some((x) => x.id === id)) await DB.remove("cashEvents", id); }
+  for (const c of CAL_ADD) { if (!ex.some((x) => x.id === c.id)) await DB.upsert("cashEvents", { ...c, status: "scheduled" }); }
+  for (const [id, date] of Object.entries(CAL_REDATE)) { const e = ex.find((x) => x.id === id); if (e) await DB.upsert("cashEvents", { ...e, date }); }
+  const draws = DB.getAll("draws");
+  for (const [id, date] of Object.entries(CAL_DRAW_DATES)) { const d = draws.find((x) => x.id === id); if (d) await DB.upsert("draws", { ...d, date }); }
+  const props = DB.getAll("properties");
+  for (const [id, date] of Object.entries(CAL_READY)) { const p = props.find((x) => x.id === id); if (p) await DB.upsert("properties", { ...p, unitsReadyDate: date }); }
+  localStorage.setItem("sshcc:draw-calendar-v1", "1");
+  console.log("Dated money-out calendar applied.");
+}
+
 // ── Arrington cash: two separate 25%-down loans, split the shared build ──────
 // The combined cash-for-keys, remodel, ADU spend and the refinance were all
 // booked on 10522. Both buildings are their own loan, so split those four

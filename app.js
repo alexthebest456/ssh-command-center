@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, applyDrawCalendar, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -711,14 +711,14 @@ function stabilizedNet() {
 // addition). Source of truth for the investor timeline so the figures we
 // walked through always render, even before the per-property fields sync.
 const BUILDS = [
-  { id: "prop-washington",      name: "Washington Street", existing: 2, newDoors: 1, newRent: 6800 },
-  { id: "prop-muller",          name: "Muller Street",     existing: 8, newDoors: 2, newRent: 3600 },
-  { id: "prop-spry",            name: "Spry Street",       existing: 2, newDoors: 1, newRent: 2950 },
-  { id: "prop-arrington-10516", name: "10516 Arrington Ave", existing: 4, newDoors: 2, newRent: 3600 },
-  { id: "prop-arrington-10522", name: "10522 Arrington Ave", existing: 4, newDoors: 2, newRent: 3600 },
-  { id: "prop-140-12th",        name: "Seal Beach ADU",    existing: 4, newDoors: 1, newRent: 3000 },
-  { id: "prop-inglewood",       name: "Inglewood",         existing: 4, newDoors: 2, newRent: 3500 },
-  { id: "prop-painter-11912",   name: "11912 Painter Ave", existing: 3, newDoors: 3, newRent: 8400 },
+  { id: "prop-washington",      name: "Washington Street",  existing: 2, newDoors: 1, newRent: 6800, ready: "2026-10-21", cash: -369564 },
+  { id: "prop-muller",          name: "Muller Street",      existing: 8, newDoors: 2, newRent: 3600, ready: "2026-12-11", cash: -270000 },
+  { id: "prop-spry",            name: "Spry Street",        existing: 2, newDoors: 1, newRent: 2950, ready: "2027-01-01", cash: -300000 },
+  { id: "prop-arrington-10516", name: "10516 Arrington Ave", existing: 4, newDoors: 2, newRent: 3600, ready: "2027-07-07", cash: -479265 },
+  { id: "prop-arrington-10522", name: "10522 Arrington Ave", existing: 4, newDoors: 2, newRent: 3600, ready: "2027-07-07", cash: -484265 },
+  { id: "prop-140-12th",        name: "Seal Beach ADU",     existing: 4, newDoors: 1, newRent: 3000, ready: "2027-07-01", cash: -230000 },
+  { id: "prop-inglewood",       name: "Inglewood",          existing: 4, newDoors: 2, newRent: 3500, ready: "2027-07-29", cash: -299578 },
+  { id: "prop-painter-11912",   name: "11912 Painter Ave",  existing: 3, newDoors: 3, newRent: 8400, ready: "2027-07-07", cash: -809040 },
 ];
 
 // Dated stabilization path for the investor view. Each planned build adds its
@@ -753,12 +753,11 @@ function stabilizationTimeline() {
   const builds = BUILDS
     .map((s) => {
       const p = state.properties.find((x) => x.id === s.id) || {};
-      const date = p.unitsReadyDate;
-      if (!parseISO(date)) return null;                     // no scheduled lease-up date yet
+      if (!parseISO(s.ready)) return null;                  // no scheduled lease-up date yet
       const add = s.newRent;                                // monthly rent the new units add
-      return { id: s.id, name: p.name || s.name, date, d: parseISO(date),
+      return { id: s.id, name: p.name || s.name, date: s.ready, d: parseISO(s.ready),
         planned: s.newDoors, totalUnits: s.existing + s.newDoors,
-        rentIn: add, add, cash: cashByProp(s.id) };
+        rentIn: add, add, cash: s.cash };                   // dates + cash from the confirmed spec
     })
     .filter(Boolean)
     .sort((a, b) => a.d - b.d);
@@ -4096,6 +4095,7 @@ async function boot() {
   try { await applyPlannedUnits(); } catch (e) { console.warn("planned units skipped", e); }
   try { await applyDealFix(); } catch (e) { console.warn("deal fix skipped", e); }
   try { await applyArringtonSplit(); } catch (e) { console.warn("arrington split skipped", e); }
+  try { await applyDrawCalendar(); } catch (e) { console.warn("draw calendar skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
