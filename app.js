@@ -706,6 +706,21 @@ function stabilizedNet() {
   return { now: n.net, then: n.net + s.upside, upside: s.upside };
 }
 
+// Confirmed development deals — existing doors, new doors, and the new units'
+// total monthly rent (rents vary by building; Washington = 3,400 ADU + 3,400
+// addition). Source of truth for the investor timeline so the figures we
+// walked through always render, even before the per-property fields sync.
+const BUILDS = [
+  { id: "prop-washington",      name: "Washington Street", existing: 2, newDoors: 1, newRent: 6800 },
+  { id: "prop-muller",          name: "Muller Street",     existing: 8, newDoors: 2, newRent: 3600 },
+  { id: "prop-spry",            name: "Spry Street",       existing: 2, newDoors: 1, newRent: 2950 },
+  { id: "prop-arrington-10516", name: "10516 Arrington Ave", existing: 4, newDoors: 2, newRent: 3600 },
+  { id: "prop-arrington-10522", name: "10522 Arrington Ave", existing: 4, newDoors: 2, newRent: 3600 },
+  { id: "prop-140-12th",        name: "Seal Beach ADU",    existing: 4, newDoors: 1, newRent: 3000 },
+  { id: "prop-inglewood",       name: "Inglewood",         existing: 4, newDoors: 2, newRent: 3500 },
+  { id: "prop-painter-11912",   name: "11912 Painter Ave", existing: 3, newDoors: 3, newRent: 8400 },
+];
+
 // Dated stabilization path for the investor view. Each planned build adds its
 // new doors' rent (avgUnitRent apiece, operating costs held flat — the same
 // convention stabilizedNet() uses) on the day it's ready to lease, so Dad can
@@ -730,19 +745,22 @@ function stabilizationTimeline() {
     return events - draws;
   };
 
-  const builds = state.properties
-    .filter((p) => (Number(p.plannedUnits) || 0) > 0 && parseISO(p.unitsReadyDate))
-    .map((p) => {
-      const planned = Number(p.plannedUnits) || 0;
-      // Per-property new rent when set (rents vary by building); otherwise fall
-      // back to the global avgUnitRent assumption × the new door count.
-      const hasRent = p.newRentMonthly !== undefined && p.newRentMonthly !== null && p.newRentMonthly !== "";
-      const add = hasRent ? (Number(p.newRentMonthly) || 0) : planned * unitRent;  // monthly rent the new units add
-      return { id: p.id, name: p.name, date: p.unitsReadyDate, d: parseISO(p.unitsReadyDate),
-        planned, totalUnits: (Number(p.units) || 0) + planned,
-        rentIn: add,                                        // only the new units' monthly rent
-        add, cash: cashByProp(p.id) };
+  // Confirmed deal facts (existing doors, new doors, and the new units' total
+  // monthly rent — rents vary by building) live here in code so the investor
+  // table always reflects what we walked through, independent of whether the
+  // per-property fields have synced through Firestore yet. Completion dates and
+  // cash still come from the live record/events so the owner's edits show.
+  const builds = BUILDS
+    .map((s) => {
+      const p = state.properties.find((x) => x.id === s.id) || {};
+      const date = p.unitsReadyDate;
+      if (!parseISO(date)) return null;                     // no scheduled lease-up date yet
+      const add = s.newRent;                                // monthly rent the new units add
+      return { id: s.id, name: p.name || s.name, date, d: parseISO(date),
+        planned: s.newDoors, totalUnits: s.existing + s.newDoors,
+        rentIn: add, add, cash: cashByProp(s.id) };
     })
+    .filter(Boolean)
     .sort((a, b) => a.d - b.d);
 
   // Running portfolio net as each build completes, in date order. Cash-on-cash
