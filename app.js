@@ -737,7 +737,7 @@ function stabilizationTimeline() {
       const add = planned * unitRent;                       // net income this build adds
       return { id: p.id, name: p.name, date: p.unitsReadyDate, d: parseISO(p.unitsReadyDate),
         planned, totalUnits: (Number(p.units) || 0) + planned,
-        rentIn: effectiveRent(p) + add,                     // stabilized rent this building brings in
+        rentIn: add,                                        // only the new units' monthly rent
         add, cash: cashByProp(p.id) };
     })
     .sort((a, b) => a.d - b.d);
@@ -1323,7 +1323,7 @@ VIEWS.investor = {
                 <tr>
                   <th>Completed</th>
                   <th>Property</th>
-                  <th class="num">Rent in / mo</th>
+                  <th class="num">New rent / mo</th>
                   <th class="num">Cash in / out</th>
                   <th class="num">Portfolio net / mo</th>
                   <th class="num">Cash-on-cash</th>
@@ -1347,7 +1347,7 @@ VIEWS.investor = {
             </table>
           </div>
           <div class="build-foot">
-            <b>Rent in</b> — what each building collects once its new units lease ·
+            <b>New rent</b> — the monthly rent the new units add once they lease ·
             <b>Cash in/out</b> — one-time build capital (a refinance returns cash) ·
             <b>Cash-on-cash</b> — the new units' yearly rent ÷ the cash put into that build (a refinance that returns your cash pushes it toward ∞) ·
             <b>Portfolio CoC</b> — every build blended so far, landing at your program return once they're all done.
