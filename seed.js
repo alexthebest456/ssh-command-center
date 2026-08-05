@@ -588,6 +588,58 @@ export async function applyDevBuildCosts() {
   console.log(`Dev build costs added on ${n} propert${n === 1 ? "y" : "ies"}.`);
 }
 
+// ── Confirmed deal corrections (walked through with the owner) ────────────────
+// Existing unit counts, new-door counts, and per-property new rent — rents vary
+// by building, so newRentMonthly is the total monthly rent the new units add
+// (Washington = 3,400 ADU + 3,400 addition). Force-set because earlier seeds
+// guessed some of these; completion DATES are deliberately left alone so the
+// owner's own timeline edits survive.
+const DEAL_FIX = [
+  { id: "prop-washington",      units: 2, plannedUnits: 1, newRentMonthly: 6800 },
+  { id: "prop-muller",          units: 8, plannedUnits: 2, newRentMonthly: 3600 },
+  { id: "prop-spry",            units: 2, plannedUnits: 1, newRentMonthly: 2950 },
+  { id: "prop-arrington-10516", units: 4, plannedUnits: 2, newRentMonthly: 3600 },
+  { id: "prop-arrington-10522", units: 4, plannedUnits: 2, newRentMonthly: 3600 },
+  { id: "prop-140-12th",        units: 4, plannedUnits: 1, newRentMonthly: 3000 },
+  { id: "prop-inglewood",       units: 4, plannedUnits: 2, newRentMonthly: 3500 },
+  { id: "prop-painter-11912",   units: 3, plannedUnits: 3, newRentMonthly: 8400 },
+];
+export async function applyDealFix() {
+  if (localStorage.getItem("sshcc:deal-fix-v1")) return;
+  const props = DB.getAll("properties");
+  let n = 0;
+  for (const f of DEAL_FIX) {
+    const p = props.find((x) => x.id === f.id);
+    if (!p) continue;
+    await DB.upsert("properties", { ...p, units: f.units, plannedUnits: f.plannedUnits, newRentMonthly: f.newRentMonthly });
+    n++;
+  }
+  localStorage.setItem("sshcc:deal-fix-v1", "1");
+  console.log(`Deal corrections applied to ${n} properties.`);
+}
+
+// ── Arrington cash: two separate 25%-down loans, split the shared build ──────
+// The combined cash-for-keys, remodel, ADU spend and the refinance were all
+// booked on 10522. Both buildings are their own loan, so split those four
+// 50/50: halve each on 10522 and mirror the other half onto 10516. Each
+// building keeps its own down payment. Idempotent by the mirror id.
+export async function applyArringtonSplit() {
+  if (localStorage.getItem("sshcc:arr-split-v1")) return;
+  const ex = DB.getAll("cashEvents");
+  const mirror = { "dc-arr-cfk": "dc-arr16-cfk", "dc-arr-remodel": "dc-arr16-remodel", "dc-arr-adu": "dc-arr16-adu", "dc-arr-refi": "dc-arr16-refi" };
+  let n = 0;
+  for (const [srcId, dstId] of Object.entries(mirror)) {
+    const src = ex.find((x) => x.id === srcId);
+    if (!src || ex.some((x) => x.id === dstId)) continue;   // missing or already split
+    const half = Math.round((Number(src.amount) || 0) / 2);
+    await DB.upsert("cashEvents", { ...src, amount: half });
+    await DB.upsert("cashEvents", { ...src, id: dstId, propertyId: "prop-arrington-10516", amount: half, note: (src.note || "") + " (10516 half)" });
+    n++;
+  }
+  localStorage.setItem("sshcc:arr-split-v1", "1");
+  console.log(`Arrington shared cash split across ${n} events.`);
+}
+
 // ── Washington schedule dates ────────────────────────────────────────────────
 // Effective working timeline (pause Feb 26–Jul 16 excluded): start anchored so
 // the 31 pre-pause working days are baked in, finish = the late-Sept forecast.

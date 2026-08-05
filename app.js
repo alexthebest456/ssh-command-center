@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -734,7 +734,10 @@ function stabilizationTimeline() {
     .filter((p) => (Number(p.plannedUnits) || 0) > 0 && parseISO(p.unitsReadyDate))
     .map((p) => {
       const planned = Number(p.plannedUnits) || 0;
-      const add = planned * unitRent;                       // net income this build adds
+      // Per-property new rent when set (rents vary by building); otherwise fall
+      // back to the global avgUnitRent assumption × the new door count.
+      const hasRent = p.newRentMonthly !== undefined && p.newRentMonthly !== null && p.newRentMonthly !== "";
+      const add = hasRent ? (Number(p.newRentMonthly) || 0) : planned * unitRent;  // monthly rent the new units add
       return { id: p.id, name: p.name, date: p.unitsReadyDate, d: parseISO(p.unitsReadyDate),
         planned, totalUnits: (Number(p.units) || 0) + planned,
         rentIn: add,                                        // only the new units' monthly rent
@@ -4073,6 +4076,8 @@ async function boot() {
   try { await applyDevCashEvents(); } catch (e) { console.warn("dev cash skipped", e); }
   try { await applyDevBuildCosts(); } catch (e) { console.warn("dev build costs skipped", e); }
   try { await applyPlannedUnits(); } catch (e) { console.warn("planned units skipped", e); }
+  try { await applyDealFix(); } catch (e) { console.warn("deal fix skipped", e); }
+  try { await applyArringtonSplit(); } catch (e) { console.warn("arrington split skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
