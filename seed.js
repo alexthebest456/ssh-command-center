@@ -781,3 +781,75 @@ export async function applyPlannedUnits() {
   localStorage.setItem("sshcc:planned-units-v1", "1");
   console.log(`Planned new doors set on ${n} properties.`);
 }
+
+// ── Alex's Real Estate Operating System — week plan + master backlog ─────────
+// Loads the operating system: this week's day themes + Big 3, and the master
+// backlog as scheduled tasks. Items with a `due` are placed on a specific day
+// (the OS rule: the backlog is not the daily schedule); the rest stay in the
+// backlog until a slot frees. Re-runnable under a bumped key when the plan
+// changes; tasks are upserted by id so status you set by hand is preserved on
+// re-runs of a DIFFERENT key only.
+const OS_WEEKPLAN = {
+  id: "weekplan",
+  weekStart: "2026-09-14",
+  big3: [
+    "NEW property underwriting completed & submitted (P0 — today)",
+    "Painter construction ready to start — bid, scope & budget finalized",
+    "Portfolio financial position + forecast moved forward",
+  ],
+  days: [
+    { date: "2026-09-14", theme: "CEO / Money — overridden by P0 underwriting" },
+    { date: "2026-09-15", theme: "Underwriting" },
+    { date: "2026-09-16", theme: "Construction" },
+    { date: "2026-09-17", theme: "Asset / Property Mgmt" },
+    { date: "2026-09-18", theme: "Travel", off: true },
+    { date: "2026-09-19", theme: "Travel", off: true },
+    { date: "2026-09-20", theme: "Travel", off: true },
+  ],
+};
+// role: major | secondary | admin (the day's structure). p: P0..P3. pr: numeric
+// priority for the existing ranking (P0=3 … P3=0). due "" = backlog.
+const OS_BACKLOG = [
+  // ── Monday Sep 14 (today) ──
+  { id: "os-newuw",      title: "Underwrite the NEW property — complete & submit", p: "P0", pr: 3, due: "2026-09-14", cat: "Underwriting", role: "major", next: "Build model → run returns → submit" },
+  { id: "os-dashboard",  title: "Load OS + backlog + weekly schedule into dashboard", p: "P1", pr: 2, due: "2026-09-14", cat: "Systems", role: "secondary" },
+  { id: "os-muller-text",title: "Text Muller tenants re: the 24th", p: "P0", pr: 3, due: "2026-09-14", project: "prop-muller", cat: "Property Ops", role: "admin" },
+  { id: "os-att",        title: "Cancel AT&T Wi-Fi at house", p: "P3", pr: 0, due: "2026-09-14", cat: "Personal Admin", role: "admin" },
+  { id: "os-ufc",        title: "Cancel UFC Gym", p: "P3", pr: 0, due: "2026-09-14", cat: "Personal Admin", role: "admin" },
+  // ── Tuesday Sep 15 — Underwriting ──
+  { id: "os-painter-uw", title: "Finish Painter underwriting", p: "P1", pr: 2, due: "2026-09-15", project: "prop-painter-11912", cat: "Underwriting", role: "major", next: "Check paid-to-date, finalize numbers" },
+  { id: "os-ingle-uw",   title: "Update Inglewood underwriting — paid vs budget, remaining cost", p: "P1", pr: 2, due: "2026-09-15", project: "prop-inglewood", cat: "Underwriting", role: "secondary" },
+  // ── Wednesday Sep 16 — Construction ──
+  { id: "os-painter-bid",title: "Finalize Painter construction bid — scope + budget → ready to start", p: "P1", pr: 2, due: "2026-09-16", project: "prop-painter-11912", cat: "Construction", role: "major" },
+  { id: "os-sb-humberto",title: "Close Seal Beach items with Humberto", p: "P2", pr: 1, due: "2026-09-16", project: "prop-140-12th", cat: "Construction", role: "secondary", waiting: "Humberto" },
+  { id: "os-arr-quotes", title: "Get multiple Arrington remodel quotes — compare scope & price", p: "P2", pr: 1, due: "2026-09-16", project: "prop-arrington-10522", cat: "Construction", role: "secondary" },
+  { id: "os-hector",     title: "Schedule Hector — Woodruff + Burke gate fixes", p: "P3", pr: 0, due: "2026-09-16", cat: "Construction", role: "admin", waiting: "Hector" },
+  // ── Thursday Sep 17 — Asset / Property Mgmt ──
+  { id: "os-doorloop",   title: "DoorLoop sweep — review/assign/follow-up maintenance + vacancies + leasing", p: "P2", pr: 1, due: "2026-09-17", cat: "Property Ops", role: "major" },
+  { id: "os-montebello", title: "Montebello setup — start utilities + move items to garage", p: "P2", pr: 1, due: "2026-09-17", cat: "Property Ops", role: "secondary" },
+  { id: "os-airbnb",     title: "Finish Airbnb — clean, resolve issues, make operational", p: "P2", pr: 1, due: "2026-09-17", cat: "Property Ops", role: "secondary" },
+  { id: "os-karina",     title: "Get back to Karina re: hedges", p: "P3", pr: 0, due: "2026-09-17", cat: "Property Ops", role: "admin", waiting: "Karina" },
+  // ── Backlog (no day yet — pull in as slots free / next week) ──
+  { id: "os-acct-meet",  title: "Schedule accountant meeting + pull current financial position", p: "P1", pr: 2, cat: "Accounting", next: "Book the meeting" },
+  { id: "os-proj-6-12",  title: "Build 6-mo & 12-mo portfolio projections (income, cash flow, occupancy, spend)", p: "P1", pr: 2, cat: "Accounting" },
+  { id: "os-muller-adu", title: "Finish Muller ADU builds/planning + track construction", p: "P1", pr: 2, project: "prop-muller", cat: "Construction" },
+  { id: "os-appliances", title: "Appliance plan — list per property, qty, models, order & track", p: "P2", pr: 1, cat: "Construction" },
+  { id: "os-social",     title: "Plan next social video — hook, concept, shots, talking points, CTA", p: "P3", pr: 0, cat: "Social Media" },
+  { id: "os-new-opps",   title: "Underwrite new opportunities as they arise", p: "P2", pr: 1, cat: "Underwriting" },
+];
+export async function applyOperatingSystem() {
+  if (localStorage.getItem("sshcc:os-v1")) return;
+  await DB.upsert("meta", OS_WEEKPLAN);
+  const ex = DB.getAll("tasks");
+  for (const t of OS_BACKLOG) {
+    if (ex.some((x) => x.id === t.id)) continue;
+    await DB.upsert("tasks", {
+      id: t.id, title: t.title, status: "open", priority: t.pr,
+      due: t.due || "", propertyId: t.project || "",
+      tags: ["os", (t.p || "").toLowerCase(), t.role || "", (t.cat || "").toLowerCase().replace(/[^a-z]+/g, "-")].filter(Boolean),
+      p: t.p || "", role: t.role || "", cat: t.cat || "", waitingOn: t.waiting || "", notes: t.next || "",
+    });
+  }
+  localStorage.setItem("sshcc:os-v1", "1");
+  console.log("Operating system loaded — week plan + backlog.");
+}

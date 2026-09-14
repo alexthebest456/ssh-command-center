@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, applyDrawCalendar, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, applyDrawCalendar, applyOperatingSystem, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -19,7 +19,7 @@ const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 // Two profiles: "alex" (full operator detail) and "dad" (investor overview).
 let profile = localStorage.getItem("sshcc:profile") || "alex";
 // Alex opens on the Command Center; Dad opens on the Investor Overview.
-let currentView = profile === "dad" ? "investor" : "command";
+let currentView = profile === "dad" ? "investor" : "week";
 let calMonth = startOfMonth(new Date());
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -132,6 +132,7 @@ function renderField(f, val) {
 // The four screens you actually work in, always visible. Everything else is
 // tucked under "More" so the sidebar is calm, not a wall of 19 options.
 const NAV_ESSENTIALS = [
+  { id: "week", label: "📅 This Week" },
   { id: "command", label: "🎯 Command" },
   { id: "builds", label: "🏗 Projects" },
   { id: "now", label: "⚡ Now" },
@@ -199,7 +200,7 @@ const DAD_NAV = [
 function setProfile(p) {
   profile = p;
   localStorage.setItem("sshcc:profile", p);
-  currentView = p === "dad" ? "investor" : "command";
+  currentView = p === "dad" ? "investor" : "week";
   renderNav(); render();
 }
 function renderNav() {
@@ -1132,6 +1133,91 @@ function ganttBlock(win, rows, filter) {
 // ─────────────────────────────────────────────────────────────────────────────
 let dashScope = "all";    // property-table scope: all / inmotion / stabilized
 let dashFilter = "all";   // build-schedule filter: all / active / blocked / permitting
+
+VIEWS.week = {
+  render() {
+    const wp = state.meta.find((x) => x.id === "weekplan") || { days: [], big3: [] };
+    const dayMeta = Object.fromEntries((wp.days || []).map((d) => [d.date, d]));
+    const mon = mondayOf(todayDate());
+    const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(d.getDate() + i); return d; });
+    const tIso = todayISO();
+    const P = { P0: ["P0", "var(--st-red,#e0685f)"], P1: ["P1", "var(--amber,#e0913a)"], P2: ["P2", "var(--st-blue,#7fa8d1)"], P3: ["P3", "var(--dash-faint,#888)"] };
+    const pInfo = (t) => P[t.p] || P[((t.tags || []).find((x) => /^p[0-3]$/.test(x)) || "").toUpperCase()] || ["", "var(--muted,#888)"];
+    const dueTasks = (iso) => openTasks().filter((t) => t.due === iso).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+    const todays = dueTasks(tIso);
+    const major = todays.find((t) => t.role === "major") || todays[0];
+    const secondary = todays.find((t) => t.role === "secondary" && t !== major);
+    const admin = todays.filter((t) => t.role === "admin");
+    const others = todays.filter((t) => t !== major && t !== secondary && !admin.includes(t));
+    const urgent = openTasks().filter((t) => pInfo(t)[0] === "P0" || (daysUntil(t.due) !== null && daysUntil(t.due) < 0))
+      .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+    const chip = (t) => {
+      const [pl, pc] = pInfo(t); const proj = propName(t.propertyId);
+      return `<div class="row" data-edit-task="${t.id}" style="cursor:pointer;gap:8px;align-items:flex-start">
+        <div class="dash-check" data-toggle="${t.id}" title="Mark done" style="width:20px;height:20px;border-radius:5px;border:1px solid var(--line,#8883);display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto;margin-top:1px">✓</div>
+        <div class="body" style="flex:1;min-width:0">
+          <div class="t" style="font-size:13.5px">${esc(t.title)}</div>
+          <div class="muted" style="font-size:11px">${pl ? `<span style="color:${pc};font-weight:800">${pl}</span> · ` : ""}${t.cat ? esc(t.cat) : ""}${proj ? " · " + esc(proj) : ""}${t.waitingOn ? ` · ⏳ ${esc(t.waitingOn)}` : ""}</div>
+        </div></div>`;
+    };
+    const dayCol = (d) => {
+      const iso = toISO(d), dm = dayMeta[iso] || {}, isToday = iso === tIso, off = dm.off, list = dueTasks(iso);
+      const dow = d.toLocaleDateString("en-US", { weekday: "short" });
+      return `<div class="panel" style="padding:12px;${isToday ? "border:1.5px solid var(--amber-line);background:var(--amber-soft)" : ""};${off ? "opacity:.6" : ""}">
+        <div class="flex between" style="align-items:baseline">
+          <div style="font-weight:800;font-size:13px">${dow} <span class="muted" style="font-weight:500">${d.getDate()}</span></div>
+          ${isToday ? `<span class="tag amber" style="font-size:9px">TODAY</span>` : off ? `<span class="tag" style="font-size:9px">OFF</span>` : ""}
+        </div>
+        <div class="mono muted" style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;margin:4px 0 8px;min-height:22px">${esc(dm.theme || "")}</div>
+        ${off ? `<div class="muted" style="font-size:11px">✈️ Traveling</div>`
+          : list.length ? list.map((t) => { const [, pc] = pInfo(t); return `<div data-edit-task="${t.id}" style="cursor:pointer;font-size:11.5px;padding:5px 0;border-top:1px solid var(--line-soft,#8881);display:flex;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:${pc};margin-top:5px;flex:0 0 auto"></span><span>${esc(t.title)}</span></div>`; }).join("")
+          : `<div class="muted" style="font-size:11px">—</div>`}
+      </div>`;
+    };
+
+    return `<div class="view view-wide">
+      <div class="view-head"><div><div class="eyebrow">Chief of Staff</div><h1>This Week</h1></div>
+        <div class="mono muted" style="font-size:11px">Mon–Thu workweek · Fri–Sun travel</div></div>
+
+      <div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
+        <div class="mono muted" style="font-size:10px;letter-spacing:1px">WEEKLY BIG 3</div>
+        <ol style="margin:8px 0 0;padding-left:20px">${(wp.big3 || []).map((b) => `<li style="font-size:14px;font-weight:600;margin-bottom:4px">${esc(b)}</li>`).join("")}</ol>
+      </div>
+
+      <div class="dash-split wide-left" style="margin-bottom:18px">
+        <div class="panel">
+          <div class="flex between"><div class="mono muted" style="font-size:10px;letter-spacing:1px">TODAY · ${esc(fmtLong(todayDate()))}</div><span class="tag amber" style="font-size:9px">${esc((dayMeta[tIso] || {}).theme || "")}</span></div>
+          ${major ? `<div style="margin-top:12px;padding:14px;border-radius:10px;background:var(--panel-2,#8881)">
+            <div class="mono" style="font-size:10px;color:var(--st-red)">① THE ONE THING${pInfo(major)[0] === "P0" ? " · P0 DEADLINE" : ""}</div>
+            <div style="font-size:19px;font-weight:800;margin-top:6px">${esc(major.title)}</div>
+            ${major.notes ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(major.notes)}</div>` : ""}
+            <button class="btn primary sm" data-toggle="${major.id}" style="margin-top:10px">✓ Done</button>
+          </div>` : `<div class="muted mt">No major task set for today.</div>`}
+          ${secondary ? `<div style="margin-top:12px"><div class="mono muted" style="font-size:10px">② SECONDARY</div>${chip(secondary)}</div>` : ""}
+          ${admin.length ? `<div style="margin-top:12px"><div class="mono muted" style="font-size:10px">③ ADMIN BLOCK — batch these</div>${admin.map(chip).join("")}</div>` : ""}
+          ${others.length ? `<details style="margin-top:8px"><summary class="muted" style="font-size:11px;cursor:pointer">${others.length} more today</summary>${others.map(chip).join("")}</details>` : ""}
+          <div class="flex" style="gap:6px;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--line-soft,#8881);padding-top:10px">
+            <span class="tag">🐕 Meatball AM</span><span class="tag">🐕 Meatball PM</span><span class="tag">💪 Workout</span><span class="tag">📖 Read 30m</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="mono" style="font-size:10px;letter-spacing:1px;color:var(--st-red)">🚨 URGENT · P0 / OVERDUE</div>
+          <div style="margin-top:8px">${urgent.length ? urgent.map(chip).join("") : `<div class="muted" style="font-size:12px">Nothing on fire. 🎯</div>`}</div>
+        </div>
+      </div>
+
+      <div class="mono muted" style="font-size:10px;letter-spacing:1px;margin-bottom:8px">THE WEEK</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${week.map(dayCol).join("")}</div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-edit-task]").forEach((el) => el.addEventListener("click", (e) => { if (e.target.closest("[data-toggle]")) return; editTask(el.dataset.editTask); }));
+    root.querySelectorAll("[data-toggle]").forEach((el) => el.addEventListener("click", (e) => { e.stopPropagation(); toggleTask(el.dataset.toggle); toast("Updated"); }));
+  },
+};
 
 VIEWS.command = {
   render() {
@@ -4096,6 +4182,7 @@ async function boot() {
   try { await applyDealFix(); } catch (e) { console.warn("deal fix skipped", e); }
   try { await applyArringtonSplit(); } catch (e) { console.warn("arrington split skipped", e); }
   try { await applyDrawCalendar(); } catch (e) { console.warn("draw calendar skipped", e); }
+  try { await applyOperatingSystem(); } catch (e) { console.warn("operating system load skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
