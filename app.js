@@ -1186,6 +1186,9 @@ VIEWS.week = {
         <ol style="margin:8px 0 0;padding-left:20px">${(wp.big3 || []).map((b) => `<li style="font-size:14px;font-weight:600;margin-bottom:4px">${esc(b)}</li>`).join("")}</ol>
       </div>
 
+      <div class="mono muted" style="font-size:10px;letter-spacing:1px;margin:2px 0 8px">THE WEEK</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:20px">${week.map(dayCol).join("")}</div>
+
       <div class="dash-split wide-left" style="margin-bottom:18px">
         <div class="panel">
           <div class="flex between"><div class="mono muted" style="font-size:10px;letter-spacing:1px">TODAY · ${esc(fmtLong(todayDate()))}</div><span class="tag amber" style="font-size:9px">${esc((dayMeta[tIso] || {}).theme || "")}</span></div>
@@ -1209,8 +1212,6 @@ VIEWS.week = {
         </div>
       </div>
 
-      <div class="mono muted" style="font-size:10px;letter-spacing:1px;margin-bottom:8px">THE WEEK</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${week.map(dayCol).join("")}</div>
     </div>`;
   },
   mount(root) {

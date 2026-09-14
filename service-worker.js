@@ -2,7 +2,7 @@
 // App-shell caching so the PWA loads offline. Firestore/CDN calls always hit
 // the network (never cached), so live data stays fresh.
 
-const CACHE = "sshcc-v14";
+const CACHE = "sshcc-v15";
 const SHELL = [
   "./",
   "./index.html",
