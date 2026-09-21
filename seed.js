@@ -783,62 +783,59 @@ export async function applyPlannedUnits() {
 }
 
 // ── Alex's Real Estate Operating System — weekly plan + master backlog ───────
-// Rewritten each week (bump the guard key). Clears the prior week's `os-*`
-// tasks, writes the new week's day themes + Big 3 (in meta), and drops each
-// scheduled item onto its day as a task (due = the day). Backlog items carry no
-// due. Fixed appointments are tasks tagged "appt" with the time in the title so
-// they show on the day. Confirmed appointments this week: Tue Hector 12pm @
-// Inglewood, Tue Michael 2pm @ Firvale (Montebello), Wed Spectrum 9-12 @ Firvale.
+// Sprint week: all 7 property underwrites due by end of Tuesday so the 6mo/1yr
+// analysis can run Wednesday. Tuesday's property tour + appliances + Woodruff
+// were moved to Thursday to free deep-work hours around the two fixed meetings.
+// Rewritten each week (bump the guard key); clears the prior week's os-* tasks.
 const OS_WEEKPLAN = {
   id: "weekplan",
   weekStart: "2026-09-21",
   big3: [
-    "Painter underwritten & ready to move (start with Painter)",
-    "6-month & 1-year portfolio analysis completed",
-    "Field reset: all properties visited, maintenance scheduled, DoorLoop fixed for good",
+    "All 7 property underwrites complete by end of Tuesday",
+    "6-month & 1-year portfolio analysis done Wednesday",
+    "Field reset Thursday — property tour, DoorLoop, Airbnb, Seal Beach",
   ],
   days: [
-    { date: "2026-09-21", theme: "Underwriting (Painter first) + Money" },
-    { date: "2026-09-22", theme: "FIELD DAY — site visits · Hector 12pm · Michael 2pm" },
-    { date: "2026-09-23", theme: "Construction — Seal Beach · Spectrum @ Firvale 9-12" },
-    { date: "2026-09-24", theme: "Asset / Property Mgmt — DoorLoop" },
-    { date: "2026-09-25", theme: "CEO / Catch-up — 6mo/1yr + weekly review" },
+    { date: "2026-09-21", theme: "UW sprint 1 — Painter · Inglewood · Seal Beach · Muller" },
+    { date: "2026-09-22", theme: "UW sprint 2 around meetings — Washington · Arrington · Firvale" },
+    { date: "2026-09-23", theme: "6mo/1yr analysis · Spectrum @ Firvale 9-12" },
+    { date: "2026-09-24", theme: "Field reset — property tour · DoorLoop · Airbnb · Seal Beach" },
+    { date: "2026-09-25", theme: "CEO catch-up — social pillars + weekly review" },
     { date: "2026-09-26", theme: "Lighter — gym + Meatball hard training" },
     { date: "2026-09-27", theme: "Reset — meal prep, plan next week" },
   ],
 };
 const OS_BACKLOG = [
-  // ── MON 9/21 — work to 6pm, meal prep after, NO workout today ──
-  { id: "os-painter-uw",  title: "Painter underwriting — complete", p: "P1", pr: 2, due: "2026-09-21", project: "prop-painter-11912", cat: "Underwriting", role: "major", next: "Start here — Painter first" },
-  { id: "os-ingle-uw",    title: "Inglewood underwriting — ready for tomorrow's Hector meeting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-inglewood", cat: "Underwriting", role: "secondary" },
-  { id: "os-pay-javier",  title: "Pay Javier (gardener)", p: "P2", pr: 1, due: "2026-09-21", cat: "Accounting", role: "admin" },
-  { id: "os-pay-bway",    title: "Pay Broadway Airbnb tax", p: "P2", pr: 1, due: "2026-09-21", cat: "Accounting", role: "admin" },
-  { id: "os-sched-maint", title: "Schedule maintenance — Roxanne gate, Chino garage, Burke gate, Nance door", p: "P2", pr: 1, due: "2026-09-21", cat: "Property Ops", role: "admin" },
-  // ── TUE 9/22 — FIELD DAY (locked by appointments; no deep underwriting) ──
-  { id: "os-appt-hector", title: "📅 12:00pm — Meet Hector @ Inglewood", p: "P1", pr: 2, due: "2026-09-22", project: "prop-inglewood", cat: "Appointment", role: "appt" },
+  // ── MON 9/21 — Underwriting sprint 1 (4) · work to 6pm, no workout ──
+  { id: "os-painter-uw", title: "Painter underwriting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-painter-11912", cat: "Underwriting", role: "major", next: "Start here — Painter first (~2h)" },
+  { id: "os-ingle-uw",   title: "Inglewood underwriting — before tomorrow's Hector meeting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-inglewood", cat: "Underwriting", role: "secondary" },
+  { id: "os-sb-uw",      title: "Seal Beach underwriting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-140-12th", cat: "Underwriting", role: "" },
+  { id: "os-muller-uw",  title: "Muller underwriting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-muller", cat: "Underwriting", role: "" },
+  { id: "os-pay-javier", title: "Pay Javier (gardener)", p: "P2", pr: 1, due: "2026-09-21", cat: "Accounting", role: "admin" },
+  { id: "os-pay-bway",   title: "Pay Broadway Airbnb tax", p: "P2", pr: 1, due: "2026-09-21", cat: "Accounting", role: "admin" },
+  { id: "os-sched-maint",title: "Schedule maintenance — Roxanne gate, Chino garage, Burke gate, Nance door", p: "P2", pr: 1, due: "2026-09-21", cat: "Property Ops", role: "admin" },
+  // ── TUE 9/22 — Underwriting sprint 2 (3) around the two fixed meetings ──
+  { id: "os-appt-hector",title: "📅 12:00pm — Meet Hector @ Inglewood", p: "P1", pr: 2, due: "2026-09-22", project: "prop-inglewood", cat: "Appointment", role: "appt" },
   { id: "os-appt-michael",title: "📅 2:00pm — Meet Michael @ Firvale (Montebello)", p: "P1", pr: 2, due: "2026-09-22", project: "prop-firvale", cat: "Appointment", role: "appt" },
-  { id: "os-visit-all",   title: "Visit ALL properties — produce a next-action per site", p: "P1", pr: 2, due: "2026-09-22", cat: "Construction", role: "major" },
-  { id: "os-appliances",  title: "Order all appliances for properties", p: "P2", pr: 1, due: "2026-09-22", cat: "Construction", role: "secondary" },
-  { id: "os-woodruff",    title: "Get Woodruff address + go to city", p: "P2", pr: 1, due: "2026-09-22", project: "prop-woodruff-nance", cat: "Property Ops", role: "secondary" },
-  // ── WED 9/23 — Construction (Spectrum @ Firvale 9-12) ──
+  { id: "os-wash-uw",    title: "Washington underwriting (may be a quick update — in framing)", p: "P1", pr: 2, due: "2026-09-22", project: "prop-washington", cat: "Underwriting", role: "major" },
+  { id: "os-arr-uw",     title: "Arrington underwriting", p: "P1", pr: 2, due: "2026-09-22", project: "prop-arrington-10522", cat: "Underwriting", role: "secondary" },
+  { id: "os-firvale-uw", title: "Firvale underwriting", p: "P1", pr: 2, due: "2026-09-22", project: "prop-firvale", cat: "Underwriting", role: "" },
+  // ── WED 9/23 — the analysis (fed by all the underwrites) ──
   { id: "os-appt-spectrum",title: "📅 9:00-12:00 — Spectrum install @ Firvale", p: "P1", pr: 2, due: "2026-09-23", project: "prop-firvale", cat: "Appointment", role: "appt" },
-  { id: "os-sb-final",    title: "Finalize Seal Beach ADU", p: "P1", pr: 2, due: "2026-09-23", project: "prop-140-12th", cat: "Construction", role: "major" },
-  { id: "os-muller-uw",   title: "Muller underwriting", p: "P1", pr: 2, due: "2026-09-23", project: "prop-muller", cat: "Underwriting", role: "secondary" },
-  // ── THU 9/24 — Asset / Property Mgmt ──
-  { id: "os-doorloop",    title: "Fix DoorLoop for good + assign/schedule all maintenance", p: "P2", pr: 1, due: "2026-09-24", cat: "Property Ops", role: "major" },
-  { id: "os-airbnb",      title: "Fix Airbnb → make fully operational", p: "P2", pr: 1, due: "2026-09-24", cat: "Property Ops", role: "secondary" },
-  // ── FRI 9/25 — CEO / Catch-up ──
-  { id: "os-6mo1yr",      title: "6-month & 1-year portfolio analysis — complete", p: "P1", pr: 2, due: "2026-09-25", cat: "Accounting", role: "major" },
-  { id: "os-social",      title: "Social media pillars + set posting schedule", p: "P3", pr: 0, due: "2026-09-25", cat: "Social Media", role: "secondary" },
-  { id: "os-weekly-rev",  title: "Weekly CEO review → build next week's Big 3", p: "P2", pr: 1, due: "2026-09-25", cat: "Systems", role: "admin" },
-  // ── BACKLOG — promoted only if a day frees (told you: 7 underwrites is too many) ──
-  { id: "os-uw-washington", title: "Underwrite Washington", p: "P2", pr: 1, project: "prop-washington", cat: "Underwriting" },
-  { id: "os-uw-arrington",  title: "Underwrite Arrington", p: "P2", pr: 1, project: "prop-arrington-10522", cat: "Underwriting" },
-  { id: "os-uw-firvale",    title: "Underwrite Firvale", p: "P2", pr: 1, project: "prop-firvale", cat: "Underwriting" },
+  { id: "os-6mo1yr",     title: "6-month & 1-year portfolio analysis — complete", p: "P1", pr: 2, due: "2026-09-23", cat: "Accounting", role: "major" },
+  // ── THU 9/24 — Field reset (moved off Tuesday) ──
+  { id: "os-visit-all",  title: "Visit all properties — produce a next-action per site", p: "P2", pr: 1, due: "2026-09-24", cat: "Construction", role: "major" },
+  { id: "os-doorloop",   title: "Fix DoorLoop for good + assign/schedule all maintenance", p: "P2", pr: 1, due: "2026-09-24", cat: "Property Ops", role: "secondary" },
+  { id: "os-airbnb",     title: "Fix Airbnb → make fully operational", p: "P2", pr: 1, due: "2026-09-24", cat: "Property Ops", role: "" },
+  { id: "os-sb-final",   title: "Finalize Seal Beach ADU", p: "P1", pr: 2, due: "2026-09-24", project: "prop-140-12th", cat: "Construction", role: "" },
+  { id: "os-appliances", title: "Order all appliances for properties", p: "P2", pr: 1, due: "2026-09-24", cat: "Construction", role: "" },
+  { id: "os-woodruff",   title: "Get Woodruff address + go to city", p: "P2", pr: 1, due: "2026-09-24", project: "prop-woodruff-nance", cat: "Property Ops", role: "" },
+  // ── FRI 9/25 — CEO catch-up ──
+  { id: "os-social",     title: "Social media pillars + set posting schedule", p: "P3", pr: 0, due: "2026-09-25", cat: "Social Media", role: "major" },
+  { id: "os-weekly-rev", title: "Weekly CEO review → build next week's Big 3", p: "P2", pr: 1, due: "2026-09-25", cat: "Systems", role: "admin" },
 ];
 export async function applyOperatingSystem() {
-  if (localStorage.getItem("sshcc:os-v2")) return;
-  // Clear the prior week's OS tasks so days don't stack up week over week.
+  if (localStorage.getItem("sshcc:os-v3")) return;
   for (const t of DB.getAll("tasks")) { if (typeof t.id === "string" && t.id.startsWith("os-")) await DB.remove("tasks", t.id); }
   await DB.upsert("meta", OS_WEEKPLAN);
   for (const t of OS_BACKLOG) {
@@ -849,6 +846,6 @@ export async function applyOperatingSystem() {
       p: t.p || "", role: t.role || "", cat: t.cat || "", waitingOn: t.waiting || "", notes: t.next || "",
     });
   }
-  localStorage.setItem("sshcc:os-v2", "1");
-  console.log("Operating system loaded — week of Sep 21.");
+  localStorage.setItem("sshcc:os-v3", "1");
+  console.log("Operating system loaded — sprint week of Sep 21.");
 }
