@@ -1143,13 +1143,15 @@ VIEWS.week = {
     const tIso = todayISO();
     const P = { P0: ["P0", "var(--st-red,#e0685f)"], P1: ["P1", "var(--amber,#e0913a)"], P2: ["P2", "var(--st-blue,#7fa8d1)"], P3: ["P3", "var(--dash-faint,#888)"] };
     const pInfo = (t) => P[t.p] || P[((t.tags || []).find((x) => /^p[0-3]$/.test(x)) || "").toUpperCase()] || ["", "var(--muted,#888)"];
-    const dueTasks = (iso) => openTasks().filter((t) => t.due === iso).sort((a, b) => (b.priority || 0) - (a.priority || 0));
-
-    const todays = dueTasks(tIso);
-    const major = todays.find((t) => t.role === "major") || todays[0];
-    const secondary = todays.find((t) => t.role === "secondary" && t !== major);
-    const admin = todays.filter((t) => t.role === "admin");
-    const others = todays.filter((t) => t !== major && t !== secondary && !admin.includes(t));
+    // Timed-block kinds: [icon, color]. WORK kinds also show on the week grid.
+    const KIND = {
+      deep: ["🎯", "var(--amber,#e0913a)"], ops: ["🔧", "var(--st-blue,#7fa8d1)"], work: ["✍️", "var(--st-blue,#7fa8d1)"],
+      review: ["📋", "var(--st-blue,#7fa8d1)"], admin: ["✉️", "var(--dash-faint,#8a8a8a)"], appt: ["📅", "var(--st-red,#e0685f)"],
+      meal: ["🍽", "var(--dash-faint,#8a8a8a)"], dog: ["🐕", "var(--st-green,#6fbf8b)"], workout: ["💪", "var(--st-green,#6fbf8b)"],
+      read: ["📖", "var(--dash-faint,#8a8a8a)"], drive: ["🚗", "var(--dash-faint,#8a8a8a)"], self: ["🚿", "var(--dash-faint,#8a8a8a)"],
+      wake: ["⏰", "var(--dash-faint,#8a8a8a)"], sleep: ["🌙", "var(--dash-faint,#8a8a8a)"],
+    };
+    const WORK = new Set(["deep", "ops", "work", "review", "appt", "admin"]);
     const urgent = openTasks().filter((t) => pInfo(t)[0] === "P0" || (daysUntil(t.due) !== null && daysUntil(t.due) < 0))
       .sort((a, b) => (b.priority || 0) - (a.priority || 0));
 
@@ -1162,8 +1164,23 @@ VIEWS.week = {
           <div class="muted" style="font-size:11px">${pl ? `<span style="color:${pc};font-weight:800">${pl}</span> · ` : ""}${t.cat ? esc(t.cat) : ""}${proj ? " · " + esc(proj) : ""}${t.waitingOn ? ` · ⏳ ${esc(t.waitingOn)}` : ""}</div>
         </div></div>`;
     };
+
+    // Full-day timeline for a given day (times down the left).
+    const agenda = (sched) => sched.map((b) => {
+      const [ic, c] = KIND[b.k] || ["•", "var(--muted,#888)"];
+      const done = b.id && state.tasks.some((t) => t.id === b.id && t.status === "done");
+      return `<div class="flex" style="gap:10px;align-items:stretch;padding:6px 0;border-top:1px solid var(--line-soft,#8881)">
+        <div class="mono muted" style="width:104px;flex:0 0 auto;font-size:11px;text-align:right;padding-top:2px">${esc(b.t)}${b.e ? `–${esc(b.e)}` : ""}</div>
+        <div style="width:3px;background:${c};border-radius:2px;flex:0 0 auto"></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;${done ? "opacity:.45;text-decoration:line-through" : ""}">
+          <span style="font-size:13px">${ic} ${esc(b.d)}</span>
+          ${b.id ? `<button class="btn sm ghost" data-toggle="${b.id}" style="margin-left:auto;padding:1px 8px;font-size:10px">${done ? "↺" : "done"}</button>` : ""}
+        </div></div>`;
+    }).join("");
+
     const dayCol = (d) => {
-      const iso = toISO(d), dm = dayMeta[iso] || {}, isToday = iso === tIso, off = dm.off, list = dueTasks(iso);
+      const iso = toISO(d), dm = dayMeta[iso] || {}, isToday = iso === tIso, off = dm.off;
+      const sc = (dm.sched || []).filter((b) => WORK.has(b.k));
       const dow = d.toLocaleDateString("en-US", { weekday: "short" });
       return `<div class="panel" style="padding:12px;${isToday ? "border:1.5px solid var(--amber-line);background:var(--amber-soft)" : ""};${off ? "opacity:.6" : ""}">
         <div class="flex between" style="align-items:baseline">
@@ -1172,14 +1189,16 @@ VIEWS.week = {
         </div>
         <div class="mono muted" style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;margin:4px 0 8px;min-height:22px">${esc(dm.theme || "")}</div>
         ${off ? `<div class="muted" style="font-size:11px">✈️ Traveling</div>`
-          : list.length ? list.map((t) => { const [, pc] = pInfo(t); return `<div data-edit-task="${t.id}" style="cursor:pointer;font-size:11.5px;padding:5px 0;border-top:1px solid var(--line-soft,#8881);display:flex;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:${pc};margin-top:5px;flex:0 0 auto"></span><span>${esc(t.title)}</span></div>`; }).join("")
+          : sc.length ? sc.map((b) => { const [, c] = KIND[b.k] || []; return `<div style="font-size:11px;padding:4px 0;border-top:1px solid var(--line-soft,#8881);display:flex;gap:6px"><span class="mono muted" style="font-size:9px;flex:0 0 auto;width:34px">${esc(b.t)}</span><span style="width:5px;height:5px;border-radius:50%;background:${c};margin-top:5px;flex:0 0 auto"></span><span style="flex:1;min-width:0">${esc(b.d)}</span></div>`; }).join("")
           : `<div class="muted" style="font-size:11px">—</div>`}
       </div>`;
     };
 
+    const todaySched = (dayMeta[tIso] || {}).sched || [];
+
     return `<div class="view view-wide">
       <div class="view-head"><div><div class="eyebrow">Chief of Staff</div><h1>This Week</h1></div>
-        <div class="mono muted" style="font-size:11px">Mon–Thu workweek · Fri–Sun travel</div></div>
+        <div class="mono muted" style="font-size:11px">${esc(fmtLong(todayDate()))}</div></div>
 
       <div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
         <div class="mono muted" style="font-size:10px;letter-spacing:1px">WEEKLY BIG 3</div>
@@ -1187,23 +1206,13 @@ VIEWS.week = {
       </div>
 
       <div class="mono muted" style="font-size:10px;letter-spacing:1px;margin:2px 0 8px">THE WEEK</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:20px">${week.map(dayCol).join("")}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:20px">${week.map(dayCol).join("")}</div>
 
       <div class="dash-split wide-left" style="margin-bottom:18px">
         <div class="panel">
-          <div class="flex between"><div class="mono muted" style="font-size:10px;letter-spacing:1px">TODAY · ${esc(fmtLong(todayDate()))}</div><span class="tag amber" style="font-size:9px">${esc((dayMeta[tIso] || {}).theme || "")}</span></div>
-          ${major ? `<div style="margin-top:12px;padding:14px;border-radius:10px;background:var(--panel-2,#8881)">
-            <div class="mono" style="font-size:10px;color:var(--st-red)">① THE ONE THING${pInfo(major)[0] === "P0" ? " · P0 DEADLINE" : ""}</div>
-            <div style="font-size:19px;font-weight:800;margin-top:6px">${esc(major.title)}</div>
-            ${major.notes ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(major.notes)}</div>` : ""}
-            <button class="btn primary sm" data-toggle="${major.id}" style="margin-top:10px">✓ Done</button>
-          </div>` : `<div class="muted mt">No major task set for today.</div>`}
-          ${secondary ? `<div style="margin-top:12px"><div class="mono muted" style="font-size:10px">② SECONDARY</div>${chip(secondary)}</div>` : ""}
-          ${admin.length ? `<div style="margin-top:12px"><div class="mono muted" style="font-size:10px">③ ADMIN BLOCK — batch these</div>${admin.map(chip).join("")}</div>` : ""}
-          ${others.length ? `<details style="margin-top:8px"><summary class="muted" style="font-size:11px;cursor:pointer">${others.length} more today</summary>${others.map(chip).join("")}</details>` : ""}
-          <div class="flex" style="gap:6px;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--line-soft,#8881);padding-top:10px">
-            <span class="tag">🐕 Meatball AM</span><span class="tag">🐕 Meatball PM</span><span class="tag">💪 Workout</span><span class="tag">📖 Read 30m</span>
-          </div>
+          <div class="flex between"><div class="mono muted" style="font-size:10px;letter-spacing:1px">TODAY'S SCHEDULE</div><span class="tag amber" style="font-size:9px">${esc((dayMeta[tIso] || {}).theme || "")}</span></div>
+          ${todaySched.length ? `<div style="margin-top:10px">${agenda(todaySched)}</div>`
+            : `<div class="muted mt" style="font-size:12px">No timed schedule for today yet.</div>`}
         </div>
 
         <div class="panel">
@@ -1211,7 +1220,6 @@ VIEWS.week = {
           <div style="margin-top:8px">${urgent.length ? urgent.map(chip).join("") : `<div class="muted" style="font-size:12px">Nothing on fire. 🎯</div>`}</div>
         </div>
       </div>
-
     </div>`;
   },
   mount(root) {

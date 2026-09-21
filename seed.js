@@ -782,11 +782,11 @@ export async function applyPlannedUnits() {
   console.log(`Planned new doors set on ${n} properties.`);
 }
 
-// ── Alex's Real Estate Operating System — weekly plan + master backlog ───────
-// Sprint week: all 7 property underwrites due by end of Tuesday so the 6mo/1yr
-// analysis can run Wednesday. Tuesday's property tour + appliances + Woodruff
-// were moved to Thursday to free deep-work hours around the two fixed meetings.
-// Rewritten each week (bump the guard key); clears the prior week's os-* tasks.
+// ── Alex's Real Estate Operating System — weekly plan + timed schedule ───────
+// Sprint week: all 7 underwrites by Tue, 6mo/1yr analysis Wed. Each day carries
+// a `sched` — the full time-blocked day (wake → Meatball → work blocks → meals →
+// workout → reading → bed) with real clock times. Blocks with an `id` map to a
+// task so they can be checked off. Rewritten each week (bump the guard key).
 const OS_WEEKPLAN = {
   id: "weekplan",
   weekStart: "2026-09-21",
@@ -796,46 +796,127 @@ const OS_WEEKPLAN = {
     "Field reset Thursday — property tour, DoorLoop, Airbnb, Seal Beach",
   ],
   days: [
-    { date: "2026-09-21", theme: "UW sprint 1 — Painter · Inglewood · Seal Beach · Muller" },
-    { date: "2026-09-22", theme: "UW sprint 2 around meetings — Washington · Arrington · Firvale" },
-    { date: "2026-09-23", theme: "6mo/1yr analysis · Spectrum @ Firvale 9-12" },
-    { date: "2026-09-24", theme: "Field reset — property tour · DoorLoop · Airbnb · Seal Beach" },
-    { date: "2026-09-25", theme: "CEO catch-up — social pillars + weekly review" },
-    { date: "2026-09-26", theme: "Lighter — gym + Meatball hard training" },
-    { date: "2026-09-27", theme: "Reset — meal prep, plan next week" },
+    { date: "2026-09-21", theme: "UW sprint 1 — Painter · Inglewood · Seal Beach · Muller", sched: [
+      { t: "7:30a", d: "Wake", k: "wake" },
+      { t: "7:45a", e: "8:30a", d: "Meatball — cardio run", k: "dog" },
+      { t: "8:30a", e: "9:00a", d: "Breakfast · shower · prep", k: "self" },
+      { t: "9:00a", e: "11:00a", d: "Painter underwriting", k: "deep", id: "os-painter-uw" },
+      { t: "11:00a", e: "11:20a", d: "Admin: pay Javier · Broadway tax · maintenance texts", k: "admin", id: "os-pay-javier" },
+      { t: "11:20a", e: "1:20p", d: "Inglewood underwriting", k: "deep", id: "os-ingle-uw" },
+      { t: "1:20p", e: "2:00p", d: "Lunch + Meatball park", k: "meal" },
+      { t: "2:00p", e: "4:00p", d: "Seal Beach underwriting", k: "deep", id: "os-sb-uw" },
+      { t: "4:00p", e: "6:00p", d: "Muller underwriting", k: "deep", id: "os-muller-uw" },
+      { t: "6:00p", e: "7:00p", d: "Meal prep", k: "ops" },
+      { t: "7:00p", e: "7:30p", d: "Meatball PM walk", k: "dog" },
+      { t: "7:30p", e: "8:15p", d: "Dinner", k: "meal" },
+      { t: "9:00p", e: "9:30p", d: "Read", k: "read" },
+      { t: "10:30p", d: "Bed", k: "sleep" },
+    ] },
+    { date: "2026-09-22", theme: "UW sprint 2 around meetings — Washington · Arrington · Firvale", sched: [
+      { t: "7:30a", d: "Wake", k: "wake" },
+      { t: "7:45a", e: "8:30a", d: "Meatball — cardio run", k: "dog" },
+      { t: "8:30a", e: "9:00a", d: "Prep", k: "self" },
+      { t: "9:00a", e: "10:30a", d: "Washington underwriting (quick update)", k: "deep", id: "os-wash-uw" },
+      { t: "10:30a", e: "11:45a", d: "Arrington underwriting — part 1", k: "deep", id: "os-arr-uw" },
+      { t: "11:45a", e: "12:00p", d: "Drive to Inglewood", k: "drive" },
+      { t: "12:00p", e: "1:00p", d: "📅 Hector @ Inglewood", k: "appt", id: "os-appt-hector" },
+      { t: "1:00p", e: "1:45p", d: "Lunch + Meatball", k: "meal" },
+      { t: "1:45p", e: "2:00p", d: "Drive to Firvale", k: "drive" },
+      { t: "2:00p", e: "3:00p", d: "📅 Michael @ Firvale (Montebello)", k: "appt", id: "os-appt-michael" },
+      { t: "3:00p", e: "5:00p", d: "Firvale underwriting", k: "deep", id: "os-firvale-uw" },
+      { t: "5:00p", e: "6:00p", d: "Finish Arrington underwriting", k: "deep" },
+      { t: "6:00p", e: "7:00p", d: "Workout", k: "workout" },
+      { t: "7:00p", e: "7:30p", d: "Meatball PM", k: "dog" },
+      { t: "7:30p", e: "8:15p", d: "Dinner", k: "meal" },
+      { t: "9:00p", e: "9:30p", d: "Read", k: "read" },
+      { t: "10:30p", d: "Bed", k: "sleep" },
+    ] },
+    { date: "2026-09-23", theme: "6mo/1yr analysis · Spectrum @ Firvale 9-12", sched: [
+      { t: "7:30a", d: "Wake", k: "wake" },
+      { t: "7:45a", e: "8:30a", d: "Meatball — cardio run", k: "dog" },
+      { t: "8:30a", e: "9:00a", d: "Prep", k: "self" },
+      { t: "9:00a", e: "12:00p", d: "📅 Spectrum install @ Firvale — present, start analysis", k: "appt", id: "os-appt-spectrum" },
+      { t: "12:00p", e: "1:00p", d: "Lunch + Meatball", k: "meal" },
+      { t: "1:00p", e: "5:00p", d: "6-month & 1-year portfolio analysis", k: "deep", id: "os-6mo1yr" },
+      { t: "5:00p", e: "6:00p", d: "Workout", k: "workout" },
+      { t: "6:30p", e: "7:00p", d: "Meatball PM", k: "dog" },
+      { t: "7:30p", e: "8:15p", d: "Dinner", k: "meal" },
+      { t: "9:00p", e: "9:30p", d: "Read", k: "read" },
+      { t: "10:30p", d: "Bed", k: "sleep" },
+    ] },
+    { date: "2026-09-24", theme: "Field reset — property tour · DoorLoop · Airbnb · Seal Beach", sched: [
+      { t: "7:30a", d: "Wake", k: "wake" },
+      { t: "7:45a", e: "8:30a", d: "Meatball — cardio run", k: "dog" },
+      { t: "8:30a", e: "9:00a", d: "Prep", k: "self" },
+      { t: "9:00a", e: "1:00p", d: "Property tour — all sites, next-action each", k: "ops", id: "os-visit-all" },
+      { t: "1:00p", e: "1:45p", d: "Lunch + Meatball park", k: "meal" },
+      { t: "1:45p", e: "3:00p", d: "Fix DoorLoop + assign maintenance", k: "ops", id: "os-doorloop" },
+      { t: "3:00p", e: "4:00p", d: "Fix Airbnb → operational", k: "ops", id: "os-airbnb" },
+      { t: "4:00p", e: "4:45p", d: "Finalize Seal Beach ADU", k: "ops", id: "os-sb-final" },
+      { t: "4:45p", e: "5:30p", d: "Order appliances + Woodruff/city", k: "admin", id: "os-appliances" },
+      { t: "5:30p", e: "6:30p", d: "Workout", k: "workout" },
+      { t: "6:30p", e: "7:00p", d: "Meatball PM", k: "dog" },
+      { t: "7:30p", e: "8:15p", d: "Dinner", k: "meal" },
+      { t: "9:00p", e: "9:30p", d: "Read", k: "read" },
+      { t: "10:30p", d: "Bed", k: "sleep" },
+    ] },
+    { date: "2026-09-25", theme: "CEO catch-up — social pillars + weekly review", sched: [
+      { t: "7:30a", d: "Wake", k: "wake" },
+      { t: "7:45a", e: "8:30a", d: "Meatball — cardio run", k: "dog" },
+      { t: "8:30a", e: "9:00a", d: "Prep", k: "self" },
+      { t: "9:00a", e: "11:00a", d: "Social media pillars + schedule", k: "work", id: "os-social" },
+      { t: "11:00a", e: "12:00p", d: "Catch-up — unfinished-priority overflow", k: "work" },
+      { t: "12:00p", e: "1:00p", d: "Lunch + Meatball", k: "meal" },
+      { t: "1:00p", e: "2:30p", d: "Weekly CEO review → next week's Big 3", k: "review", id: "os-weekly-rev" },
+      { t: "2:30p", e: "3:30p", d: "Workout", k: "workout" },
+      { t: "3:30p", e: "4:00p", d: "Meatball PM", k: "dog" },
+      { t: "7:30p", e: "8:15p", d: "Dinner", k: "meal" },
+      { t: "9:00p", e: "9:30p", d: "Read", k: "read" },
+      { t: "10:30p", d: "Bed", k: "sleep" },
+    ] },
+    { date: "2026-09-26", theme: "Lighter — gym + Meatball hard training", sched: [
+      { t: "8:00a", d: "Wake", k: "wake" },
+      { t: "8:15a", e: "11:00a", d: "Meatball — hard hunting training", k: "dog" },
+      { t: "11:00a", e: "12:00p", d: "Gym", k: "workout" },
+      { t: "1:00p", e: "3:30p", d: "Focused work overflow (2–3h)", k: "work" },
+      { t: "6:00p", e: "6:30p", d: "Meatball PM", k: "dog" },
+      { t: "9:00p", e: "9:30p", d: "Read", k: "read" },
+    ] },
+    { date: "2026-09-27", theme: "Reset — meal prep, plan next week", sched: [
+      { t: "8:00a", d: "Wake", k: "wake" },
+      { t: "8:15a", e: "9:00a", d: "Meatball walk", k: "dog" },
+      { t: "9:00a", e: "10:00a", d: "Gym", k: "workout" },
+      { t: "10:30a", e: "12:00p", d: "Meal prep", k: "ops" },
+      { t: "12:00p", e: "1:00p", d: "Laundry / home reset", k: "self" },
+      { t: "1:00p", e: "2:30p", d: "Weekly review + plan next week", k: "review" },
+      { t: "6:00p", e: "6:30p", d: "Meatball PM", k: "dog" },
+      { t: "9:00p", e: "9:30p", d: "Read", k: "read" },
+    ] },
   ],
 };
 const OS_BACKLOG = [
-  // ── MON 9/21 — Underwriting sprint 1 (4) · work to 6pm, no workout ──
   { id: "os-painter-uw", title: "Painter underwriting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-painter-11912", cat: "Underwriting", role: "major", next: "Start here — Painter first (~2h)" },
   { id: "os-ingle-uw",   title: "Inglewood underwriting — before tomorrow's Hector meeting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-inglewood", cat: "Underwriting", role: "secondary" },
   { id: "os-sb-uw",      title: "Seal Beach underwriting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-140-12th", cat: "Underwriting", role: "" },
   { id: "os-muller-uw",  title: "Muller underwriting", p: "P1", pr: 2, due: "2026-09-21", project: "prop-muller", cat: "Underwriting", role: "" },
-  { id: "os-pay-javier", title: "Pay Javier (gardener)", p: "P2", pr: 1, due: "2026-09-21", cat: "Accounting", role: "admin" },
-  { id: "os-pay-bway",   title: "Pay Broadway Airbnb tax", p: "P2", pr: 1, due: "2026-09-21", cat: "Accounting", role: "admin" },
-  { id: "os-sched-maint",title: "Schedule maintenance — Roxanne gate, Chino garage, Burke gate, Nance door", p: "P2", pr: 1, due: "2026-09-21", cat: "Property Ops", role: "admin" },
-  // ── TUE 9/22 — Underwriting sprint 2 (3) around the two fixed meetings ──
+  { id: "os-pay-javier", title: "Pay Javier (gardener) · Broadway Airbnb tax · schedule maintenance (Roxanne/Chino/Burke/Nance)", p: "P2", pr: 1, due: "2026-09-21", cat: "Accounting", role: "admin" },
   { id: "os-appt-hector",title: "📅 12:00pm — Meet Hector @ Inglewood", p: "P1", pr: 2, due: "2026-09-22", project: "prop-inglewood", cat: "Appointment", role: "appt" },
   { id: "os-appt-michael",title: "📅 2:00pm — Meet Michael @ Firvale (Montebello)", p: "P1", pr: 2, due: "2026-09-22", project: "prop-firvale", cat: "Appointment", role: "appt" },
   { id: "os-wash-uw",    title: "Washington underwriting (may be a quick update — in framing)", p: "P1", pr: 2, due: "2026-09-22", project: "prop-washington", cat: "Underwriting", role: "major" },
   { id: "os-arr-uw",     title: "Arrington underwriting", p: "P1", pr: 2, due: "2026-09-22", project: "prop-arrington-10522", cat: "Underwriting", role: "secondary" },
   { id: "os-firvale-uw", title: "Firvale underwriting", p: "P1", pr: 2, due: "2026-09-22", project: "prop-firvale", cat: "Underwriting", role: "" },
-  // ── WED 9/23 — the analysis (fed by all the underwrites) ──
   { id: "os-appt-spectrum",title: "📅 9:00-12:00 — Spectrum install @ Firvale", p: "P1", pr: 2, due: "2026-09-23", project: "prop-firvale", cat: "Appointment", role: "appt" },
   { id: "os-6mo1yr",     title: "6-month & 1-year portfolio analysis — complete", p: "P1", pr: 2, due: "2026-09-23", cat: "Accounting", role: "major" },
-  // ── THU 9/24 — Field reset (moved off Tuesday) ──
   { id: "os-visit-all",  title: "Visit all properties — produce a next-action per site", p: "P2", pr: 1, due: "2026-09-24", cat: "Construction", role: "major" },
   { id: "os-doorloop",   title: "Fix DoorLoop for good + assign/schedule all maintenance", p: "P2", pr: 1, due: "2026-09-24", cat: "Property Ops", role: "secondary" },
   { id: "os-airbnb",     title: "Fix Airbnb → make fully operational", p: "P2", pr: 1, due: "2026-09-24", cat: "Property Ops", role: "" },
   { id: "os-sb-final",   title: "Finalize Seal Beach ADU", p: "P1", pr: 2, due: "2026-09-24", project: "prop-140-12th", cat: "Construction", role: "" },
-  { id: "os-appliances", title: "Order all appliances for properties", p: "P2", pr: 1, due: "2026-09-24", cat: "Construction", role: "" },
-  { id: "os-woodruff",   title: "Get Woodruff address + go to city", p: "P2", pr: 1, due: "2026-09-24", project: "prop-woodruff-nance", cat: "Property Ops", role: "" },
-  // ── FRI 9/25 — CEO catch-up ──
+  { id: "os-appliances", title: "Order all appliances for properties + Woodruff address/city", p: "P2", pr: 1, due: "2026-09-24", cat: "Construction", role: "" },
   { id: "os-social",     title: "Social media pillars + set posting schedule", p: "P3", pr: 0, due: "2026-09-25", cat: "Social Media", role: "major" },
   { id: "os-weekly-rev", title: "Weekly CEO review → build next week's Big 3", p: "P2", pr: 1, due: "2026-09-25", cat: "Systems", role: "admin" },
 ];
 export async function applyOperatingSystem() {
-  if (localStorage.getItem("sshcc:os-v3")) return;
+  if (localStorage.getItem("sshcc:os-v4")) return;
   for (const t of DB.getAll("tasks")) { if (typeof t.id === "string" && t.id.startsWith("os-")) await DB.remove("tasks", t.id); }
   await DB.upsert("meta", OS_WEEKPLAN);
   for (const t of OS_BACKLOG) {
@@ -846,6 +927,6 @@ export async function applyOperatingSystem() {
       p: t.p || "", role: t.role || "", cat: t.cat || "", waitingOn: t.waiting || "", notes: t.next || "",
     });
   }
-  localStorage.setItem("sshcc:os-v3", "1");
-  console.log("Operating system loaded — sprint week of Sep 21.");
+  localStorage.setItem("sshcc:os-v4", "1");
+  console.log("Operating system loaded — timed sprint week of Sep 21.");
 }
