@@ -932,3 +932,145 @@ export async function applyOperatingSystem() {
   localStorage.setItem("sshcc:os-v5", "1");
   console.log("Operating system loaded — re-anchored week of Sep 21.");
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SSH OPERATING-SYSTEM REBUILD — Oct 22, 2026
+//  Replaces the active dashboard structure with the current source of truth.
+//  Nothing is deleted: prior collections (properties, cashEvents, draws, leases,
+//  etc.) are preserved; only the old os-* planner tasks and weekplan are cleared
+//  and the new SSH layer is written. Every unknown figure is "Pending Input" —
+//  no budgets, percentages, returns or dates are invented.
+// ═════════════════════════════════════════════════════════════════════════════
+const PI = "Pending Input";
+const SSH_PEOPLE = [
+  { id: "p-alex", name: "Alex", role: "GP · Portfolio Manager · Arrington GC", order: 1 },
+  { id: "p-hector", name: "Hector", role: "Construction — Painter & Inglewood", order: 2 },
+  { id: "p-juan", name: "Juan", role: "Airbnb operations (after handoff)", order: 3 },
+  { id: "p-camilla", name: "Camilla", role: "Architect — Spry", order: 4 },
+  { id: "p-arch-sb", name: "Architect — Seal Beach", role: "Architect — Seal Beach plans", order: 5 },
+  { id: "p-unassigned", name: "Unassigned", role: "No owner yet", order: 9 },
+];
+// section ids line up with the nav. Each project carries management state only;
+// financials stay in their own collections / Pending Input.
+const SSH_PROJECTS = [
+  { id: "pj-arrington", name: "Arrington", propertyId: "prop-arrington-10522", priority: "Highest", owner: "p-alex",
+    status: "Active construction", phase: "7-unit renovation — setup", units: 7,
+    next: "Establish unit-by-unit renovation tracking", blocker: "", order: 1,
+    note: "Alex is acting GC/PM — first independent renovation of this size.", budget: PI, spent: PI, committed: PI },
+  { id: "pj-firvale", name: "Firvale", propertyId: "prop-firvale", priority: "High", owner: "p-alex",
+    status: "Active construction", phase: "Demolition", units: 1,
+    next: "Sat Oct 24 — demo one unit + remove debris", blocker: "", order: 2, budget: PI, spent: PI, committed: PI },
+  { id: "pj-sealbeach", name: "Seal Beach", propertyId: "prop-140-12th", priority: "Urgent", owner: "p-alex",
+    status: "Entitlement + tenant notices", phase: "Architect plans → city; move-out notices",
+    next: "Architect: finalize plans + submit to city · issue lawful tenant move-out notices (URGENT)",
+    blocker: "Tenant notices must be served before move-out timeline", order: 3, budget: PI, spent: PI, committed: PI },
+  { id: "pj-washington", name: "Washington", propertyId: "prop-washington", priority: "High", owner: "p-alex",
+    status: "Near completion / stabilizing", phase: "Landscaping + pergola; lease-up",
+    next: "Finish landscaping + pergola · lease the 1 vacant unit · complete underwriting", blocker: "", order: 4, budget: PI, spent: PI, committed: PI },
+  { id: "pj-painter", name: "Painter", propertyId: "prop-painter-11912", priority: "Medium", owner: "p-hector",
+    status: "Active renovation (Hector)", phase: "Renovation in progress",
+    next: "Get Hector's weekly report · underwrite", blocker: "", order: 5,
+    note: "Hector manages execution; Alex = oversight + approvals.", budget: PI, spent: PI, committed: PI },
+  { id: "pj-inglewood", name: "Inglewood", propertyId: "prop-inglewood", priority: "Medium", owner: "p-hector",
+    status: "Active renovation (Hector) + NEW Airbnb setup", phase: "Renovation + Airbnb build-out",
+    next: "Track Hector's progress · set up the new Inglewood Airbnb", blocker: "", order: 6, budget: PI, spent: PI, committed: PI },
+  { id: "pj-spry", name: "Spry", propertyId: "prop-spry", priority: "Medium", owner: "p-camilla",
+    status: "Planning / architectural", phase: "Architect plans (Camilla)",
+    next: "Contact Camilla — confirm plan completion date · underwrite", blocker: "Waiting on Camilla's plans", order: 7, budget: PI, spent: PI, committed: PI },
+];
+// Arrington — 7 units, standard renovation sequence, all pending until entered.
+const ARR_PHASES = ["Demolition", "Rough plumbing/electrical", "Inspections", "Insulation", "Drywall", "Bathroom", "Kitchen", "Flooring", "Paint", "Appliances", "Punch list", "Complete"];
+const SSH_AUNITS = Array.from({ length: 7 }, (_, i) => ({
+  id: `au-${i + 1}`, projectId: "pj-arrington", unit: `Unit ${i + 1}`, order: i + 1,
+  phase: "Not started", status: "Not started", subs: "", scheduledThisWeek: "",
+  materialsNeeded: PI, materialsOrdered: "", delivery: "", eta: PI,
+  budget: PI, actual: PI, committed: PI, remaining: PI, variance: PI, blockers: "",
+}));
+const SSH_VACANCIES = [
+  { id: "vac-muller-1", property: "Muller", propertyId: "prop-muller", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 1 },
+  { id: "vac-muller-2", property: "Muller", propertyId: "prop-muller", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 2 },
+  { id: "vac-wash-1", property: "Washington", propertyId: "prop-washington", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 3 },
+  { id: "vac-bway-1", property: "Broadway", propertyId: "prop-broadway", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 4 },
+];
+const SSH_UW = [
+  { id: "uw-arrington", name: "Arrington", projectId: "pj-arrington", status: "Not Started", order: 1 },
+  { id: "uw-washington", name: "Washington", projectId: "pj-washington", status: "Not Started", order: 2 },
+  { id: "uw-spry", name: "Spry", projectId: "pj-spry", status: "Not Started", order: 3 },
+  { id: "uw-painter", name: "Painter", projectId: "pj-painter", status: "Not Started", order: 4 },
+  { id: "uw-fifth", name: "Fifth property — pending identification", projectId: "", status: "Identify property", order: 5 },
+].map((u) => ({ ...u, income: PI, opex: PI, noi: PI, renoCost: PI, capitalReq: PI, stabRent: PI, stabGross: PI, stabOpex: PI, stabNoi: PI, addlCashflow: PI, completion: PI, stabilization: PI, debt: PI, refiProceeds: PI, equity: PI, coc: PI, assumptions: "" }));
+const SSH_PROCURE = [
+  { id: "pr-arr-fridge", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Refrigerator", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 1 },
+  { id: "pr-arr-stove", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Stove / range", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 2 },
+  { id: "pr-arr-dw", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Dishwasher", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 3 },
+  { id: "pr-arr-washer", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Washer", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 4 },
+  { id: "pr-arr-dryer", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Dryer", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 5 },
+  { id: "pr-ingle-airbnb", project: "Inglewood Airbnb", projectId: "pj-inglewood", unit: "Airbnb", type: "Furniture + appliances + essentials", qty: PI, dims: "", model: PI, vendor: PI, price: PI, status: "List not built", delivery: "", install: "", owner: "p-alex", order: 6 },
+];
+const SSH_HANDOFF = [
+  "Airbnb account + appropriate access permissions", "Guest communication", "Reservation management",
+  "Check-ins & checkouts", "Cleaning coordination", "Supply inventory", "Maintenance requests",
+  "Emergency procedures", "Expense management", "Spending approval limits", "Weekly operating reports", "Escalation procedures",
+].map((t, i) => ({ id: `ho-${i + 1}`, item: t, status: "Not Started", owner: "p-juan", order: i + 1 }));
+
+// Prepopulated action items. prio: urgent|high|medium|low (pr = numeric rank).
+function sshTask(o) {
+  const rank = { urgent: 3, high: 2, medium: 1, low: 0 }[o.prio] ?? 1;
+  return { id: o.id, title: o.title, status: "open", stage: "not-started", priority: rank, prio: o.prio || "medium",
+    due: o.due || "", propertyId: o.propertyId || "", owner: o.owner || "p-alex", section: o.section || "",
+    tags: ["ssh", o.section || "", o.prio || ""].filter(Boolean), waitingOn: o.waiting || "", notes: o.note || "" };
+}
+const SSH_TASKS = [
+  // ── Thu Oct 22 ──
+  sshTask({ id: "t-sb-arch", title: "Contact Seal Beach architect about city submission", due: "2026-10-22", prio: "urgent", section: "pipeline", propertyId: "prop-140-12th" }),
+  sshTask({ id: "t-sb-notice", title: "Address Seal Beach tenant move-out notice requirements — confirm lawful grounds, timing & service", due: "2026-10-22", prio: "urgent", section: "pipeline", propertyId: "prop-140-12th" }),
+  sshTask({ id: "t-spry-camilla", title: "Contact Camilla — confirm Spry architectural plan completion date", due: "2026-10-22", prio: "high", section: "pipeline", propertyId: "prop-spry" }),
+  sshTask({ id: "t-firvale-prep", title: "Prepare Firvale Saturday demolition — dumpster, scope, tools/labor, access & utility safety", due: "2026-10-22", prio: "high", section: "firvale", propertyId: "prop-firvale" }),
+  sshTask({ id: "t-arr-track", title: "Establish Arrington renovation tracking (unit-by-unit)", due: "2026-10-22", prio: "high", section: "arrington", propertyId: "prop-arrington-10522" }),
+  sshTask({ id: "t-painter-report", title: "Request Hector's Painter progress update", due: "2026-10-22", prio: "medium", section: "projects", propertyId: "prop-painter-11912", owner: "p-hector", waiting: "Hector" }),
+  sshTask({ id: "t-ingle-report", title: "Request Hector's Inglewood progress update", due: "2026-10-22", prio: "medium", section: "projects", propertyId: "prop-inglewood", owner: "p-hector", waiting: "Hector" }),
+  // ── Fri Oct 23 ──
+  sshTask({ id: "t-juan-handoff", title: "Meet Juan — existing Airbnb handoff", due: "2026-10-23", prio: "high", section: "airbnb", owner: "p-juan" }),
+  sshTask({ id: "t-arr-review", title: "Review Arrington construction status", due: "2026-10-23", prio: "high", section: "arrington", propertyId: "prop-arrington-10522" }),
+  sshTask({ id: "t-appliances-id", title: "Identify appliances required for each unit", due: "2026-10-23", prio: "high", section: "procurement" }),
+  sshTask({ id: "t-expense-track", title: "Establish renovation expense tracking", due: "2026-10-23", prio: "high", section: "financial" }),
+  sshTask({ id: "t-vacancy-check", title: "Check status of the four vacant units", due: "2026-10-23", prio: "high", section: "leasing" }),
+  sshTask({ id: "t-wash-landscape", title: "Follow up on Washington landscaping + pergola", due: "2026-10-23", prio: "medium", section: "projects", propertyId: "prop-washington" }),
+  // ── Sat Oct 24 ──
+  sshTask({ id: "t-firvale-demo", title: "Perform Firvale unit demolition (per safety & regulatory requirements)", due: "2026-10-24", prio: "high", section: "firvale", propertyId: "prop-firvale" }),
+  sshTask({ id: "t-firvale-debris", title: "Remove demolition debris", due: "2026-10-24", prio: "medium", section: "firvale", propertyId: "prop-firvale" }),
+  sshTask({ id: "t-firvale-expense", title: "Document demolition expenses", due: "2026-10-24", prio: "medium", section: "financial", propertyId: "prop-firvale" }),
+  sshTask({ id: "t-firvale-photos", title: "Photograph demolition progress", due: "2026-10-24", prio: "low", section: "firvale", propertyId: "prop-firvale" }),
+  sshTask({ id: "t-firvale-milestone", title: "Establish Firvale's next construction milestone", due: "2026-10-24", prio: "medium", section: "firvale", propertyId: "prop-firvale" }),
+  // ── Next priority (backlog) ──
+  sshTask({ id: "t-uw-arr", title: "Complete Arrington underwriting", prio: "high", section: "underwriting", propertyId: "prop-arrington-10522" }),
+  sshTask({ id: "t-uw-wash", title: "Complete Washington underwriting", prio: "high", section: "underwriting", propertyId: "prop-washington" }),
+  sshTask({ id: "t-uw-painter", title: "Complete Painter underwriting", prio: "high", section: "underwriting", propertyId: "prop-painter-11912" }),
+  sshTask({ id: "t-uw-spry", title: "Complete Spry underwriting", prio: "high", section: "underwriting", propertyId: "prop-spry" }),
+  sshTask({ id: "t-uw-fifth", title: "Identify the fifth property requiring underwriting", prio: "medium", section: "underwriting" }),
+  sshTask({ id: "t-tax", title: "Organize 2026 tax records", prio: "medium", section: "admin" }),
+  sshTask({ id: "t-ingle-furniture", title: "Create Inglewood Airbnb furniture list", prio: "medium", section: "airbnb", propertyId: "prop-inglewood" }),
+  sshTask({ id: "t-budgets", title: "Establish construction budgets", prio: "high", section: "financial" }),
+  sshTask({ id: "t-appliance-list", title: "Build consolidated appliance purchasing list", prio: "medium", section: "procurement" }),
+  sshTask({ id: "t-forecast", title: "Develop six-month & one-year portfolio forecasts", prio: "medium", section: "plan" }),
+  sshTask({ id: "t-doorloop", title: "Implement DoorLoop (lowest priority — backlog only)", prio: "low", section: "admin" }),
+];
+export async function applySSHReset() {
+  if (localStorage.getItem("sshcc:ssh-reset-v1")) return;
+  // Archive (not delete) the old planner layer: clear os-* tasks + weekplan so
+  // the active board shows only the new system. All other data is preserved.
+  for (const t of DB.getAll("tasks")) { if (typeof t.id === "string" && t.id.startsWith("os-")) await DB.remove("tasks", t.id); }
+  const wp = DB.getAll("meta").find((m) => m.id === "weekplan"); if (wp) await DB.remove("meta", "weekplan");
+  const seedCol = async (col, rows) => { const ex = DB.getAll(col); for (const r of rows) if (!ex.some((x) => x.id === r.id)) await DB.upsert(col, r); };
+  await seedCol("people", SSH_PEOPLE);
+  await seedCol("projects", SSH_PROJECTS);
+  await seedCol("aunits", SSH_AUNITS);
+  await seedCol("vacancies", SSH_VACANCIES);
+  await seedCol("uw", SSH_UW);
+  await seedCol("procure", SSH_PROCURE);
+  await seedCol("handoff", SSH_HANDOFF);
+  await seedCol("tasks", SSH_TASKS);
+  await DB.upsert("meta", { id: "ssh-config", arrPhases: ARR_PHASES, resetAt: "2026-10-22" });
+  localStorage.setItem("sshcc:ssh-reset-v1", "1");
+  console.log("SSH operating-system rebuild loaded.");
+}

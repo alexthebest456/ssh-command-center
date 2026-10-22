@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, applyDrawCalendar, applyOperatingSystem, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, applyDrawCalendar, applyOperatingSystem, applySSHReset, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -13,13 +13,15 @@ const COLLECTIONS = [
   "routines", "routineLog", "photos", "reviews", "scorecards", "meta",
   "habits", "habitLog", "goals", "books", "workouts", "academy", "vocab",
   "quizLog", "cashEvents", "strLog", "draws", "trades", "siteLog",
+  // SSH operating-system layer (Oct 2026 rebuild)
+  "people", "projects", "aunits", "vacancies", "uw", "procure", "handoff", "expenses",
 ];
 const state = Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
 
 // Two profiles: "alex" (full operator detail) and "dad" (investor overview).
 let profile = localStorage.getItem("sshcc:profile") || "alex";
 // Alex opens on the Command Center; Dad opens on the Investor Overview.
-let currentView = profile === "dad" ? "investor" : "week";
+let currentView = profile === "dad" ? "exec" : "daily";
 let calMonth = startOfMonth(new Date());
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -132,42 +134,32 @@ function renderField(f, val) {
 // The four screens you actually work in, always visible. Everything else is
 // tucked under "More" so the sidebar is calm, not a wall of 19 options.
 const NAV_ESSENTIALS = [
-  { id: "week", label: "📅 This Week" },
-  { id: "command", label: "🎯 Command" },
-  { id: "builds", label: "🏗 Projects" },
-  { id: "now", label: "⚡ Now" },
-  { id: "academy", label: "🎓 Academy" },
+  { id: "daily", label: "🎯 Daily Command" },
+  { id: "exec", label: "📊 Executive Overview" },
+  { id: "projects", label: "🏗 Master Projects" },
+  { id: "arrington", label: "🔨 Arrington · 7 units" },
 ];
 const NAV_MORE = [
-  { title: "Daily", items: [
-    { id: "myday", label: "My Day" },
-    { id: "dailyos", label: "Daily Non-Negotiables" },
-    { id: "goals", label: "Goals" },
-    { id: "reading", label: "Reading" },
+  { title: "Operations", items: [
+    { id: "financial", label: "05 · Financial" },
+    { id: "procurement", label: "06 · Purchasing" },
+    { id: "leasing", label: "07 · Leasing & Vacancies" },
   ]},
-  { title: "Tasks", items: [
-    { id: "capture", label: "Capture" },
-    { id: "horizon", label: "2-Week Horizon" },
-    { id: "backlog", label: "Backlog" },
+  { title: "Growth", items: [
+    { id: "underwriting", label: "08 · Underwriting" },
+    { id: "pipeline", label: "09 · Development Pipeline" },
+    { id: "plan", label: "11 · 6-Month / 1-Year Plan" },
   ]},
-  { title: "Properties", items: [
-    { id: "money", label: "💰 True Net" },
-    { id: "cashflow", label: "💸 Cash Flow" },
-    { id: "calendar", label: "Property Calendar" },
-    { id: "maintenance", label: "Maintenance" },
-    { id: "leases", label: "Leases & Rent" },
+  { title: "People & Admin", items: [
+    { id: "airbnb", label: "10 · Airbnb Operations" },
+    { id: "admin", label: "12 · Administration" },
   ]},
-  { title: "Marketing", items: [
-    { id: "content", label: "Content Calendar" },
-  ]},
-  { title: "Review", items: [
-    { id: "investor", label: "Investor Overview (Dad)" },
-    { id: "performance", label: "Portfolio Performance" },
-    { id: "scorecard", label: "Monthly Scorecard" },
-    { id: "weekly", label: "Weekly Review" },
-    { id: "productivity", label: "Productivity" },
-  ]},
-  { title: "System", items: [
+  { title: "Archive · old dashboard", items: [
+    { id: "week", label: "This Week (planner)" },
+    { id: "command", label: "Old Command" },
+    { id: "investor", label: "Investor / Dad (legacy)" },
+    { id: "cashflow", label: "Cash Flow (legacy)" },
+    { id: "builds", label: "Builds (legacy)" },
     { id: "data", label: "Data & Sync" },
   ]},
 ];
@@ -200,7 +192,7 @@ const DAD_NAV = [
 function setProfile(p) {
   profile = p;
   localStorage.setItem("sshcc:profile", p);
-  currentView = p === "dad" ? "investor" : "week";
+  currentView = p === "dad" ? "exec" : "daily";
   renderNav(); render();
 }
 function renderNav() {
@@ -1226,6 +1218,298 @@ VIEWS.week = {
     root.querySelectorAll("[data-edit-task]").forEach((el) => el.addEventListener("click", (e) => { if (e.target.closest("[data-toggle]")) return; editTask(el.dataset.editTask); }));
     root.querySelectorAll("[data-toggle]").forEach((el) => el.addEventListener("click", (e) => { e.stopPropagation(); toggleTask(el.dataset.toggle); toast("Updated"); }));
   },
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SSH OPERATING SYSTEM — views (Oct 2026 rebuild)
+// ═════════════════════════════════════════════════════════════════════════════
+const PRIO = { urgent: ["Urgent", "var(--st-red,#e0685f)"], high: ["High", "var(--amber,#e0913a)"], medium: ["Medium", "var(--st-blue,#7fa8d1)"], low: ["Low", "var(--dash-faint,#8a8a8a)"] };
+const STAGE = { "not-started": ["Not Started", "var(--dash-faint,#8a8a8a)"], "in-progress": ["In Progress", "var(--st-blue,#7fa8d1)"], "waiting": ["Waiting", "var(--amber,#e0913a)"], "blocked": ["Blocked", "var(--st-red,#e0685f)"], "completed": ["Completed", "var(--st-green,#6fbf8b)"] };
+const STAGE_CYCLE = ["not-started", "in-progress", "waiting", "blocked"];
+let sshPrioFilter = "all";
+function sshPerson(id) { return (state.people || []).find((p) => p.id === id); }
+function sshOwnerName(id) { const p = sshPerson(id); return p ? p.name : (id ? id : "Unassigned"); }
+function sshProjects() { return (state.projects || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function isPI(v) { return v === undefined || v === null || v === "" || v === "Pending Input"; }
+function piText(v) { return isPI(v) ? `<span style="color:var(--dash-faint,#8a8a8a);font-style:italic">Pending Input</span>` : esc(String(v)); }
+function sshOpen() { return (state.tasks || []).filter((t) => (t.tags || []).includes("ssh") && t.status !== "done"); }
+function sshBySection(sec) { return sshOpen().filter((t) => t.section === sec).sort((a, b) => (b.priority || 0) - (a.priority || 0)); }
+function sshHead(num, title, sub) { return `<div class="view-head"><div><div class="eyebrow">SSH · ${esc(num)}</div><h1>${esc(title)}</h1></div>${sub ? `<div class="mono muted" style="font-size:11px">${esc(sub)}</div>` : ""}</div>`; }
+function kpi(k, v, sub, color) { return `<div class="stat"><div class="k">${esc(k)}</div><div class="v" style="font-size:22px;${color ? `color:${color}` : ""}">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`; }
+function sshTable(cols, rows) {
+  return `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:${Math.max(560, cols.length * 108)}px;font-size:12px">
+    <thead><tr>${cols.map((c) => `<th style="text-align:left;padding:8px 12px 8px 0;border-bottom:1px solid var(--line,#8883);font-family:var(--mono);font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--dash-faint,#888);white-space:nowrap">${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map((r) => `<tr style="border-bottom:1px solid var(--line-soft,#8881)">${r.map((c) => `<td style="padding:9px 12px 9px 0;vertical-align:top">${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+function sshDue(t) {
+  if (!t.due) return "";
+  const n = daysUntil(t.due);
+  if (n < 0) return `<span style="color:var(--st-red,#e0685f)">${-n}d overdue</span>`;
+  if (n === 0) return `<span style="color:var(--st-red,#e0685f)">today</span>`;
+  if (n <= 7) return `in ${n}d`;
+  return fmtDate(t.due);
+}
+function sshTaskRow(t) {
+  const [pl, pc] = PRIO[t.prio] || ["", ""]; const st = STAGE[t.stage] || STAGE["not-started"];
+  const owner = sshOwnerName(t.owner); const proj = propName(t.propertyId); const dd = sshDue(t);
+  return `<div class="row" data-edit-task="${t.id}" style="gap:10px;align-items:flex-start;cursor:pointer">
+    <div class="dash-check" data-done="${t.id}" title="Mark complete" style="width:20px;height:20px;border-radius:5px;border:1px solid var(--line,#8883);display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto;margin-top:1px">✓</div>
+    <div class="body" style="flex:1;min-width:0">
+      <div class="t" style="font-size:13.5px">${esc(t.title)}</div>
+      <div class="muted" style="font-size:11px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
+        ${pl ? `<span style="color:${pc};font-weight:800">${pl}</span>` : ""}
+        <span>👤 ${esc(owner)}</span>
+        ${proj ? `<span>· ${esc(proj)}</span>` : ""}
+        ${t.waitingOn ? `<span>· ⏳ ${esc(t.waitingOn)}</span>` : ""}
+        ${dd ? `<span>· ${dd}</span>` : ""}
+        <span data-stage="${t.id}" style="cursor:pointer;color:${st[1]};border:1px solid ${st[1]};border-radius:10px;padding:0 7px;font-size:9px;font-weight:800">${st[0]}</span>
+      </div>
+    </div></div>`;
+}
+function sshList(tasks, empty) { return tasks.length ? tasks.map(sshTaskRow).join("") : `<div class="muted" style="font-size:12px">${esc(empty || "Nothing here.")}</div>`; }
+function sshMount(root) {
+  root.querySelectorAll("[data-done]").forEach((el) => el.addEventListener("click", (e) => {
+    e.stopPropagation(); const t = state.tasks.find((x) => x.id === el.dataset.done); if (!t) return;
+    const done = t.status === "done"; DB.upsert("tasks", { ...t, status: done ? "open" : "done", stage: done ? "not-started" : "completed" }); toast(done ? "Reopened" : "Completed ✓");
+  }));
+  root.querySelectorAll("[data-stage]").forEach((el) => el.addEventListener("click", (e) => {
+    e.stopPropagation(); const t = state.tasks.find((x) => x.id === el.dataset.stage); if (!t) return;
+    const i = STAGE_CYCLE.indexOf(t.stage || "not-started"); DB.upsert("tasks", { ...t, stage: STAGE_CYCLE[(i + 1) % STAGE_CYCLE.length] }); toast("Status updated");
+  }));
+  root.querySelectorAll("[data-edit-task]").forEach((el) => el.addEventListener("click", (e) => { if (e.target.closest("[data-done],[data-stage]")) return; editTask(el.dataset.editTask); }));
+  root.querySelectorAll("[data-nav]").forEach((el) => el.addEventListener("click", () => go(el.dataset.nav)));
+  root.querySelectorAll("[data-prio-filter]").forEach((el) => el.addEventListener("click", () => { sshPrioFilter = el.dataset.prioFilter; render(); }));
+}
+
+// ── 02 · Daily Command Center ────────────────────────────────────────────────
+VIEWS.daily = {
+  render() {
+    const open = sshOpen();
+    const filt = sshPrioFilter === "all" ? open : open.filter((t) => t.prio === sshPrioFilter);
+    const overdue = filt.filter((t) => { const n = daysUntil(t.due); return n !== null && n < 0; }).sort((a, b) => (a.due || "").localeCompare(b.due || ""));
+    const today = filt.filter((t) => daysUntil(t.due) === 0);
+    const soon = filt.filter((t) => { const n = daysUntil(t.due); return n !== null && n >= 1 && n <= 7; }).sort((a, b) => (a.due || "").localeCompare(b.due || ""));
+    const waiting = filt.filter((t) => t.waitingOn || t.stage === "waiting" || t.stage === "blocked");
+    const big3 = open.slice().sort((a, b) => (b.priority || 0) - (a.priority || 0) || (a.due || "9").localeCompare(b.due || "9")).slice(0, 3);
+    const fbtn = (k, l) => `<button data-prio-filter="${k}" class="btn sm ${sshPrioFilter === k ? "primary" : "ghost"}" style="padding:3px 10px;font-size:11px">${l}</button>`;
+    const card = (title, list, empty, red) => `<div class="panel" style="${red ? "border-color:var(--st-red-line,#e0685f55)" : ""}"><div class="panel-title"><span class="n">▸</span> ${esc(title)} <span class="muted" style="font-weight:400">· ${list.length}</span></div><div class="mt">${sshList(list, empty)}</div></div>`;
+    return `<div class="view view-wide">
+      ${sshHead("02", "Daily Command Center", fmtLong(todayDate()))}
+      <div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)">
+        <div class="mono muted" style="font-size:10px;letter-spacing:1px">TODAY'S TOP 3</div>
+        <div class="mt">${big3.length ? big3.map(sshTaskRow).join("") : `<div class="muted">No open priorities. 🎯</div>`}</div>
+      </div>
+      <div class="flex" style="gap:6px;flex-wrap:wrap;margin-bottom:14px">${fbtn("all", "All")}${fbtn("urgent", "Urgent")}${fbtn("high", "High")}${fbtn("medium", "Medium")}${fbtn("low", "Low")}</div>
+      <div class="dash-split">
+        ${card("Overdue", overdue, "Nothing overdue.", true)}
+        ${card("Due today", today, "Nothing due today.")}
+      </div>
+      <div class="dash-split" style="margin-top:14px">
+        ${card("Next 7 days", soon, "Clear for the week.")}
+        ${card("Waiting / blocked / follow-up", waiting, "Not waiting on anyone.")}
+      </div>
+      <div class="mono muted" style="font-size:10px;margin-top:14px">Tap a task to edit · tap the status pill to cycle Not Started → In Progress → Waiting → Blocked · tap ✓ to complete.</div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 01 · Executive Overview ──────────────────────────────────────────────────
+VIEWS.exec = {
+  render() {
+    const pj = sshProjects();
+    const active = pj.filter((p) => /construction|renovation|demolition/i.test(p.status));
+    const vac = state.vacancies || [];
+    const uwDone = (state.uw || []).filter((u) => /complete|done/i.test(u.status)).length;
+    const deadlines = sshOpen().filter((t) => t.due).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 8);
+    const projRows = pj.map((p) => [
+      `<b>${esc(p.name)}</b>`, esc(p.status), piText(p.phase), esc(sshOwnerName(p.owner)),
+      `<span style="color:${(PRIO[p.priority.toLowerCase()] || [,"var(--dash-faint)"])[1]};font-weight:700">${esc(p.priority)}</span>`,
+      piText(p.budget), piText(p.spent), esc(p.next || ""),
+    ]);
+    return `<div class="view view-wide">
+      ${sshHead("01", "Executive Overview", "SSH — Supr Sick Houzzes · " + fmtLong(todayDate()))}
+      <div class="grid cols-4 mb">
+        ${kpi("Active projects", String(active.length), `${pj.length} total in portfolio`)}
+        ${kpi("Known vacancies", String(vac.length), "revenue priority")}
+        ${kpi("Underwriting", `${uwDone}/${(state.uw || []).length}`, "models complete")}
+        ${kpi("Construction budget", piText("Pending Input"), "enter project budgets")}
+      </div>
+      <div class="grid cols-4 mb">
+        ${kpi("Total spend", piText("Pending Input"))}
+        ${kpi("Committed costs", piText("Pending Input"))}
+        ${kpi("Remaining capital", piText("Pending Input"))}
+        ${kpi("Projected stabilized NOI", piText("Pending Input"))}
+      </div>
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Project summary</div><div class="mt">${sshTable(["Project", "Status", "Phase", "Owner", "Priority", "Budget", "Spent", "Next action"], projRows)}</div></div>
+      <div class="dash-split">
+        <div class="panel"><div class="panel-title"><span class="n">▸</span> Upcoming deadlines</div><div class="mt">${deadlines.length ? deadlines.map((t) => `<div class="detail-row" data-edit-task="${t.id}" style="cursor:pointer"><div><div class="n" style="font-size:12.5px">${esc(t.title)}</div><div class="w">${esc(sshOwnerName(t.owner))}</div></div><div class="a mono" style="font-size:11px">${sshDue(t)}</div></div>`).join("") : `<div class="muted">No dated deadlines.</div>`}</div></div>
+        <div class="panel"><div class="panel-title"><span class="n">▸</span> Known vacancies · ${vac.length}</div><div class="mt">${vac.map((v) => `<div class="detail-row"><div><div class="n" style="font-size:12.5px">${esc(v.property)} — ${esc(v.unit)}</div><div class="w">${esc(v.leaseStatus)}</div></div><div class="a">${piText(v.askingRent)}</div></div>`).join("")}<div class="muted mt" style="font-size:11px">Vacancy loss: ${piText("Pending Input")} — enter target rents in Leasing.</div></div></div>
+      </div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 03 · Master Project Tracker ──────────────────────────────────────────────
+VIEWS.projects = {
+  render() {
+    const rows = sshProjects().map((p) => [
+      `<b>${esc(p.name)}</b>${p.note ? `<div class="muted" style="font-size:10.5px">${esc(p.note)}</div>` : ""}`,
+      `<span style="color:${(PRIO[p.priority.toLowerCase()] || [,"var(--dash-faint)"])[1]};font-weight:700">${esc(p.priority)}</span>`,
+      esc(p.status), piText(p.phase), esc(sshOwnerName(p.owner)), esc(p.next || ""),
+      p.blocker ? `<span style="color:var(--st-red,#e0685f)">${esc(p.blocker)}</span>` : `<span class="muted">—</span>`,
+    ]);
+    return `<div class="view view-wide">
+      ${sshHead("03", "Master Project Tracker", sshProjects().length + " active projects")}
+      <div class="panel">${sshTable(["Project", "Priority", "Status", "Phase", "Owner", "Next action", "Blocker"], rows)}</div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 04 · Arrington Construction (7 units) ────────────────────────────────────
+VIEWS.arrington = {
+  render() {
+    const units = (state.aunits || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const phases = (state.meta.find((m) => m.id === "ssh-config") || {}).arrPhases || [];
+    const rows = units.map((u) => [
+      `<b>${esc(u.unit)}</b>`, piText(u.phase), esc(u.status || ""), piText(u.subs), piText(u.materialsNeeded),
+      piText(u.budget), piText(u.actual), piText(u.committed), piText(u.remaining), u.blockers ? `<span style="color:var(--st-red)">${esc(u.blockers)}</span>` : `<span class="muted">—</span>`,
+    ]);
+    const tasks = sshBySection("arrington");
+    return `<div class="view view-wide">
+      ${sshHead("04", "Arrington Construction", "7-unit renovation · Alex = GC/PM · HIGHEST priority")}
+      <div class="panel mb" style="border:1.5px solid var(--amber-line);background:var(--amber-soft)"><div class="mono muted" style="font-size:10px;letter-spacing:1px">CONSTRUCTION SEQUENCE</div><div class="flex" style="gap:5px;flex-wrap:wrap;margin-top:8px">${phases.map((p, i) => `<span class="tag" style="font-size:10px">${i + 1}. ${esc(p)}</span>`).join("")}</div><div class="muted" style="font-size:11px;margin-top:8px">⚠️ Permits & inspections required before closing walls or completing regulated work (incl. the wall opening/widening — needs structural review).</div></div>
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Unit-by-unit tracker</div><div class="mt">${sshTable(["Unit", "Phase", "Status", "Subs", "Materials", "Budget", "Actual", "Committed", "Remaining", "Blockers"], rows)}</div><div class="muted mt" style="font-size:11px">All budget/material fields are Pending Input — tap a unit's data in the app to fill as the project ramps. Scope per unit: flooring, kitchen counters + cabinet paint + hardware, drywall, full bathroom (tub/tile/vanity/mirror), recessed + ceiling fans, insulation, appliances (W/D, DW, fridge, stove), final finishes.</div></div>
+      <div class="panel"><div class="panel-title"><span class="n">▸</span> Arrington tasks</div><div class="mt">${sshList(tasks, "No open Arrington tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 05 · Financial Management ────────────────────────────────────────────────
+VIEWS.financial = {
+  render() {
+    const exp = state.expenses || [];
+    const rows = sshProjects().map((p) => [`<b>${esc(p.name)}</b>`, piText(p.budget), piText(p.spent), piText(p.committed), piText("Pending Input"), piText("Pending Input")]);
+    return `<div class="view view-wide">
+      ${sshHead("05", "Financial Management", "budgets · expenses · cost-to-complete")}
+      <div class="panel mb" style="background:var(--dash-panel-2,#8881)"><div class="mono muted" style="font-size:10px">FORMULA</div><div style="font-size:13px;font-weight:600;margin-top:6px">Budget − Actual − Committed = Uncommitted Remaining</div><div class="muted" style="font-size:11px;margin-top:4px">Estimated cost-to-complete and projected final cost tracked separately. Figures roll up from expense entries once logged.</div></div>
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Project budget rollup</div><div class="mt">${sshTable(["Project", "Budget", "Actual", "Committed", "Remaining", "Projected final"], rows)}</div></div>
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Expense log</div><div class="mt">${exp.length ? sshTable(["Date", "Property", "Vendor", "Category", "Amount", "Status"], exp.map((e) => [esc(e.date || ""), esc(e.property || ""), esc(e.vendor || ""), esc(e.category || ""), piText(e.actual), esc(e.payStatus || "")])) : `<div class="muted" style="font-size:12px">No expenses logged yet. Categories: demolition, electrical, plumbing, HVAC, framing, insulation, drywall, painting, cabinets, countertops, flooring, bathrooms, appliances, labor, landscaping, permits, architectural, misc. Add entries per property/unit as you spend.</div>`}</div></div>
+      <div class="panel"><div class="panel-title"><span class="n">▸</span> Financial tasks</div><div class="mt">${sshList(sshBySection("financial"), "No open financial tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 06 · Purchasing & Procurement ────────────────────────────────────────────
+VIEWS.procurement = {
+  render() {
+    const rows = (state.procure || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map((r) => [
+      `${esc(r.project)}${r.unit ? `<div class="muted" style="font-size:10.5px">${esc(r.unit)}</div>` : ""}`, esc(r.type), piText(r.qty), piText(r.model), piText(r.vendor), piText(r.price), esc(r.status || ""), esc(r.delivery || "—"), esc(sshOwnerName(r.owner)),
+    ]);
+    return `<div class="view view-wide">
+      ${sshHead("06", "Purchasing & Procurement", "appliances · materials · furniture")}
+      <div class="panel mb" style="border-color:var(--amber-line)"><div class="muted" style="font-size:12px">⚠️ Flag appliances that must be ordered soon to avoid construction delays. Nothing is purchased without your approval. Look for bulk opportunities across the 7 Arrington units.</div></div>
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Procurement tracker</div><div class="mt">${sshTable(["Project", "Type", "Qty", "Model", "Vendor", "Price", "Status", "Delivery", "Owner"], rows)}</div></div>
+      <div class="panel"><div class="panel-title"><span class="n">▸</span> Procurement tasks</div><div class="mt">${sshList(sshBySection("procurement"), "No open procurement tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 07 · Leasing & Vacancies ─────────────────────────────────────────────────
+VIEWS.leasing = {
+  render() {
+    const vac = (state.vacancies || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const rows = vac.map((v) => [
+      `<b>${esc(v.property)}</b><div class="muted" style="font-size:10.5px">${esc(v.unit)}</div>`, piText(v.condition), esc(v.rentReady), piText(v.targetRent), piText(v.askingRent), esc(v.listing), String(v.showings || 0), String(v.apps || 0), esc(v.leaseStatus), piText(v.daysVacant), piText(v.vacancyLoss),
+    ]);
+    return `<div class="view view-wide">
+      ${sshHead("07", "Leasing & Vacancies", "4 known vacancies · revenue priority")}
+      <div class="grid cols-3 mb">${kpi("Vacant units", String(vac.length))}${kpi("Monthly vacancy loss", piText("Pending Input"), "enter target rents")}${kpi("Leases signed", "0", "of " + vac.length)}</div>
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Vacancy board</div><div class="mt">${sshTable(["Property / Unit", "Condition", "Rent-ready", "Target rent", "Asking", "Listing", "Showings", "Apps", "Lease", "Days vacant", "Loss/mo"], rows)}</div></div>
+      <div class="panel"><div class="panel-title"><span class="n">▸</span> Leasing tasks</div><div class="mt">${sshList(sshBySection("leasing"), "No open leasing tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 08 · Underwriting ────────────────────────────────────────────────────────
+VIEWS.underwriting = {
+  render() {
+    const uw = (state.uw || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const rows = uw.map((u) => [`<b>${esc(u.name)}</b>`, esc(u.status), piText(u.noi), piText(u.capitalReq), piText(u.stabNoi), piText(u.addlCashflow), piText(u.coc), piText(u.completion)]);
+    return `<div class="view view-wide">
+      ${sshHead("08", "Underwriting", uw.length + " models · none fabricated")}
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Underwriting tracker</div><div class="mt">${sshTable(["Property", "Status", "Current NOI", "Capital req.", "Stabilized NOI", "Added cash flow", "CoC", "Completion"], rows)}</div><div class="muted mt" style="font-size:11px">Each model also needs: existing income, opex, reno cost, stabilized rents/gross, debt, refi proceeds, projected equity, assumptions & risks. All Pending Input — unverified assumptions are never shown as confirmed. Once complete, these feed the 6-month / 1-year plan.</div></div>
+      <div class="panel"><div class="panel-title"><span class="n">▸</span> Underwriting tasks</div><div class="mt">${sshList(sshBySection("underwriting"), "No open underwriting tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 09 · Development Pipeline ─────────────────────────────────────────────────
+VIEWS.pipeline = {
+  render() {
+    const dev = sshProjects().filter((p) => /entitlement|planning|architect|plans/i.test(p.status + p.phase));
+    const rows = dev.map((p) => [`<b>${esc(p.name)}</b>`, esc(sshOwnerName(p.owner)), esc(p.phase), esc(p.next || ""), p.blocker ? `<span style="color:var(--st-red)">${esc(p.blocker)}</span>` : "—"]);
+    return `<div class="view view-wide">
+      ${sshHead("09", "Development Pipeline", "architects · plans · permits")}
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Plans & entitlements</div><div class="mt">${sshTable(["Project", "Architect/Owner", "Phase", "Next milestone", "Blocker"], rows)}</div></div>
+      <div class="panel"><div class="panel-title"><span class="n">▸</span> Pipeline tasks</div><div class="mt">${sshList(sshBySection("pipeline"), "No open pipeline tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 10 · Airbnb Operations ───────────────────────────────────────────────────
+VIEWS.airbnb = {
+  render() {
+    const ho = (state.handoff || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const hoRows = ho.map((h) => [esc(h.item), esc(h.status), esc(sshOwnerName(h.owner))]);
+    return `<div class="view view-wide">
+      ${sshHead("10", "Airbnb Operations", "two separate tracks")}
+      <div class="dash-split">
+        <div class="panel"><div class="panel-title"><span class="n">▸</span> Existing Airbnb → Juan (handoff)</div><div class="muted" style="font-size:11px;margin:4px 0 8px">Meeting Fri Oct 23 · goal: remove this from Alex's daily workload.</div>${sshTable(["Handoff item", "Status", "Owner"], hoRows)}</div>
+        <div class="panel"><div class="panel-title"><span class="n">▸</span> NEW Inglewood Airbnb (setup)</div><div class="muted" style="font-size:11px;margin:4px 0 8px">Separate project — still needs build-out & launch.</div>${sshTable(["Setup area", "Status"], [["Furniture shopping list", piText("Pending Input")], ["Furniture budget", piText("Pending Input")], ["Appliances & essentials", piText("Pending Input")], ["Internet & utilities", "Not Started"], ["Photography", "Not Started"], ["Listing prep", "Not Started"], ["Target launch date", piText("Pending Input")]])}</div>
+      </div>
+      <div class="panel" style="margin-top:14px"><div class="panel-title"><span class="n">▸</span> Airbnb tasks</div><div class="mt">${sshList(sshBySection("airbnb"), "No open Airbnb tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 11 · Six-Month / One-Year Plan ───────────────────────────────────────────
+VIEWS.plan = {
+  render() {
+    const qs = ["Which projects complete within 6 months?", "Which stay under construction?", "Units becoming rent-ready?", "Added monthly rental income?", "Added NOI?", "Construction capital required?", "Refinance-eligible projects?", "Expected refi proceeds?", "Projected monthly cash flow?", "Which projects get capital first?", "Biggest schedule risks?", "Expected position in 12 months?"];
+    return `<div class="view view-wide">
+      ${sshHead("11", "Six-Month / One-Year Plan", "Oct 2026 → Apr 2027 · Oct 2026 → Oct 2027")}
+      <div class="panel mb" style="border-color:var(--amber-line)"><div class="muted" style="font-size:12px">⚠️ This forecast is driven by the underwriting models — <b>${(state.uw || []).filter((u) => /complete/i.test(u.status)).length}/${(state.uw || []).length} complete</b>. Until underwriting is done, every figure below is <b>Pending Input</b>. No returns or completion dates are fabricated.</div></div>
+      <div class="dash-split">
+        <div class="panel"><div class="panel-title"><span class="n">▸</span> 6-month (Oct '26 – Apr '27)</div><div class="mt">${qs.map((q) => `<div class="detail-row"><div class="n" style="font-size:12px">${esc(q)}</div><div class="a">${piText("Pending Input")}</div></div>`).join("")}</div></div>
+        <div class="panel"><div class="panel-title"><span class="n">▸</span> 1-year (Oct '26 – Oct '27)</div><div class="mt">${qs.map((q) => `<div class="detail-row"><div class="n" style="font-size:12px">${esc(q)}</div><div class="a">${piText("Pending Input")}</div></div>`).join("")}</div></div>
+      </div>
+      <div class="panel" style="margin-top:14px"><div class="panel-title"><span class="n">▸</span> Planning tasks</div><div class="mt">${sshList(sshBySection("plan"), "No open planning tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
+};
+
+// ── 12 · Administration ──────────────────────────────────────────────────────
+VIEWS.admin = {
+  render() {
+    return `<div class="view view-wide">
+      ${sshHead("12", "Administration", "taxes · systems · backlog")}
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> 2026 Tax Preparation</div><div class="mt">${sshTable(["Area", "Status"], [["Income & expenses by property", piText("Pending Input")], ["Renovation expenditure records", piText("Pending Input")], ["Receipts & invoices", piText("Pending Input")], ["Vendor payments", piText("Pending Input")], ["Repairs vs. capital improvements (CPA review)", "Not Started"], ["Accountant meeting / submission", "Not Started"]])}<div class="muted mt" style="font-size:11px">Goal: keep 2026 taxes from becoming a last-minute project. Distinguish repairs vs. capital improvements subject to CPA review.</div></div>
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> DoorLoop — backlog (lowest priority)</div><div class="muted mt" style="font-size:12px">Implement eventually. Not on the active list unless an operational dependency develops.</div></div>
+      <div class="panel"><div class="panel-title"><span class="n">▸</span> Admin tasks</div><div class="mt">${sshList(sshBySection("admin"), "No open admin tasks.")}</div></div>
+    </div>`;
+  },
+  mount(root) { sshMount(root); },
 };
 
 VIEWS.command = {
@@ -4192,6 +4476,7 @@ async function boot() {
   try { await applyArringtonSplit(); } catch (e) { console.warn("arrington split skipped", e); }
   try { await applyDrawCalendar(); } catch (e) { console.warn("draw calendar skipped", e); }
   try { await applyOperatingSystem(); } catch (e) { console.warn("operating system load skipped", e); }
+  try { await applySSHReset(); } catch (e) { console.warn("SSH reset skipped", e); }
   try { await reconcileAcademy(); } catch (e) { console.warn("academy sync skipped", e); }
   render();
 }
