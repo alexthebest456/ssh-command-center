@@ -942,7 +942,7 @@ export async function applyOperatingSystem() {
 //  no budgets, percentages, returns or dates are invented.
 // ═════════════════════════════════════════════════════════════════════════════
 const PI = "Pending Input";
-const SSH_PEOPLE = [
+export const SSH_PEOPLE = [
   { id: "p-alex", name: "Alex", role: "GP · Portfolio Manager · Arrington GC", order: 1 },
   { id: "p-hector", name: "Hector", role: "Construction — Painter & Inglewood", order: 2 },
   { id: "p-juan", name: "Juan", role: "Airbnb operations (after handoff)", order: 3 },
@@ -952,7 +952,7 @@ const SSH_PEOPLE = [
 ];
 // section ids line up with the nav. Each project carries management state only;
 // financials stay in their own collections / Pending Input.
-const SSH_PROJECTS = [
+export const SSH_PROJECTS = [
   { id: "pj-arrington", name: "Arrington", propertyId: "prop-arrington-10522", priority: "Highest", owner: "p-alex",
     status: "Active construction", phase: "7-unit renovation — setup", units: 7,
     next: "Establish unit-by-unit renovation tracking", blocker: "", order: 1,
@@ -979,27 +979,27 @@ const SSH_PROJECTS = [
     next: "Contact Camilla — confirm plan completion date · underwrite", blocker: "Waiting on Camilla's plans", order: 7, budget: PI, spent: PI, committed: PI },
 ];
 // Arrington — 7 units, standard renovation sequence, all pending until entered.
-const ARR_PHASES = ["Demolition", "Rough plumbing/electrical", "Inspections", "Insulation", "Drywall", "Bathroom", "Kitchen", "Flooring", "Paint", "Appliances", "Punch list", "Complete"];
-const SSH_AUNITS = Array.from({ length: 7 }, (_, i) => ({
+export const ARR_PHASES = ["Demolition", "Rough plumbing/electrical", "Inspections", "Insulation", "Drywall", "Bathroom", "Kitchen", "Flooring", "Paint", "Appliances", "Punch list", "Complete"];
+export const SSH_AUNITS = Array.from({ length: 7 }, (_, i) => ({
   id: `au-${i + 1}`, projectId: "pj-arrington", unit: `Unit ${i + 1}`, order: i + 1,
   phase: "Not started", status: "Not started", subs: "", scheduledThisWeek: "",
   materialsNeeded: PI, materialsOrdered: "", delivery: "", eta: PI,
   budget: PI, actual: PI, committed: PI, remaining: PI, variance: PI, blockers: "",
 }));
-const SSH_VACANCIES = [
+export const SSH_VACANCIES = [
   { id: "vac-muller-1", property: "Muller", propertyId: "prop-muller", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 1 },
   { id: "vac-muller-2", property: "Muller", propertyId: "prop-muller", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 2 },
   { id: "vac-wash-1", property: "Washington", propertyId: "prop-washington", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 3 },
   { id: "vac-bway-1", property: "Broadway", propertyId: "prop-broadway", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 4 },
 ];
-const SSH_UW = [
+export const SSH_UW = [
   { id: "uw-arrington", name: "Arrington", projectId: "pj-arrington", status: "Not Started", order: 1 },
   { id: "uw-washington", name: "Washington", projectId: "pj-washington", status: "Not Started", order: 2 },
   { id: "uw-spry", name: "Spry", projectId: "pj-spry", status: "Not Started", order: 3 },
   { id: "uw-painter", name: "Painter", projectId: "pj-painter", status: "Not Started", order: 4 },
   { id: "uw-fifth", name: "Fifth property — pending identification", projectId: "", status: "Identify property", order: 5 },
 ].map((u) => ({ ...u, income: PI, opex: PI, noi: PI, renoCost: PI, capitalReq: PI, stabRent: PI, stabGross: PI, stabOpex: PI, stabNoi: PI, addlCashflow: PI, completion: PI, stabilization: PI, debt: PI, refiProceeds: PI, equity: PI, coc: PI, assumptions: "" }));
-const SSH_PROCURE = [
+export const SSH_PROCURE = [
   { id: "pr-arr-fridge", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Refrigerator", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 1 },
   { id: "pr-arr-stove", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Stove / range", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 2 },
   { id: "pr-arr-dw", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Dishwasher", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 3 },
@@ -1007,7 +1007,7 @@ const SSH_PROCURE = [
   { id: "pr-arr-dryer", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Dryer", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 5 },
   { id: "pr-ingle-airbnb", project: "Inglewood Airbnb", projectId: "pj-inglewood", unit: "Airbnb", type: "Furniture + appliances + essentials", qty: PI, dims: "", model: PI, vendor: PI, price: PI, status: "List not built", delivery: "", install: "", owner: "p-alex", order: 6 },
 ];
-const SSH_HANDOFF = [
+export const SSH_HANDOFF = [
   "Airbnb account + appropriate access permissions", "Guest communication", "Reservation management",
   "Check-ins & checkouts", "Cleaning coordination", "Supply inventory", "Maintenance requests",
   "Emergency procedures", "Expense management", "Spending approval limits", "Weekly operating reports", "Escalation procedures",

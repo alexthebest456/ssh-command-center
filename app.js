@@ -2,7 +2,7 @@
 //  SSH COMMAND CENTER — APP
 // ─────────────────────────────────────────────────────────────────────────────
 import { DB, genId } from "./db.js";
-import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, applyDrawCalendar, applyOperatingSystem, applySSHReset, DEFAULT_STAGES } from "./seed.js";
+import { seedIfEmpty, seedPersonalOS, upgradePortfolio, applyPortfolioStatuses, applyExecSetup, applyCashSeed, applyFinancials, applyFinancialsV2, applyVacancies, applyBroadwayAirbnb, applyBroadwayAirbnbV2, applyStrSeed, applyWashingtonDraws, applyWashingtonDates, applyDevCashEvents, applyDevBuildCosts, applyPlannedUnits, applyDealFix, applyArringtonSplit, applyDrawCalendar, applyOperatingSystem, applySSHReset, SSH_PEOPLE, SSH_PROJECTS, SSH_AUNITS, SSH_VACANCIES, SSH_UW, SSH_PROCURE, SSH_HANDOFF, ARR_PHASES, DEFAULT_STAGES } from "./seed.js";
 import { reconcileAcademy, TEXTS, EXAM_FACTS } from "./academy-curriculum.js";
 import { QUESTIONS } from "./academy-questions.js";
 import { buildPlan, sectionRanges, planStatus, fmtWeekday, fmtShort, PLAN_START } from "./academy-plan.js";
@@ -1227,9 +1227,20 @@ const PRIO = { urgent: ["Urgent", "var(--st-red,#e0685f)"], high: ["High", "var(
 const STAGE = { "not-started": ["Not Started", "var(--dash-faint,#8a8a8a)"], "in-progress": ["In Progress", "var(--st-blue,#7fa8d1)"], "waiting": ["Waiting", "var(--amber,#e0913a)"], "blocked": ["Blocked", "var(--st-red,#e0685f)"], "completed": ["Completed", "var(--st-green,#6fbf8b)"] };
 const STAGE_CYCLE = ["not-started", "in-progress", "waiting", "blocked"];
 let sshPrioFilter = "all";
-function sshPerson(id) { return (state.people || []).find((p) => p.id === id); }
+// Each getter prefers live DB data (editable) but falls back to the code
+// baseline so sections always render even if Firestore hasn't synced the new
+// collections yet.
+function sshSrc(col, base) { const s = state[col]; return (s && s.length) ? s : base; }
+function sshPeople() { return sshSrc("people", SSH_PEOPLE); }
+function sshPerson(id) { return sshPeople().find((p) => p.id === id); }
 function sshOwnerName(id) { const p = sshPerson(id); return p ? p.name : (id ? id : "Unassigned"); }
-function sshProjects() { return (state.projects || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function sshProjects() { return sshSrc("projects", SSH_PROJECTS).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function sshVac() { return sshSrc("vacancies", SSH_VACANCIES).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function sshUw() { return sshSrc("uw", SSH_UW).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function sshProcure() { return sshSrc("procure", SSH_PROCURE).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function sshHandoff() { return sshSrc("handoff", SSH_HANDOFF).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function sshUnits() { return sshSrc("aunits", SSH_AUNITS).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+function sshPhases() { const c = (state.meta || []).find((m) => m.id === "ssh-config"); return (c && c.arrPhases) || ARR_PHASES; }
 function isPI(v) { return v === undefined || v === null || v === "" || v === "Pending Input"; }
 function piText(v) { return isPI(v) ? `<span style="color:var(--dash-faint,#8a8a8a);font-style:italic">Pending Input</span>` : esc(String(v)); }
 function sshOpen() { return (state.tasks || []).filter((t) => (t.tags || []).includes("ssh") && t.status !== "done"); }
@@ -1319,8 +1330,8 @@ VIEWS.exec = {
   render() {
     const pj = sshProjects();
     const active = pj.filter((p) => /construction|renovation|demolition/i.test(p.status));
-    const vac = state.vacancies || [];
-    const uwDone = (state.uw || []).filter((u) => /complete|done/i.test(u.status)).length;
+    const vac = sshVac();
+    const uwDone = sshUw().filter((u) => /complete|done/i.test(u.status)).length;
     const deadlines = sshOpen().filter((t) => t.due).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 8);
     const projRows = pj.map((p) => [
       `<b>${esc(p.name)}</b>`, esc(p.status), piText(p.phase), esc(sshOwnerName(p.owner)),
@@ -1332,7 +1343,7 @@ VIEWS.exec = {
       <div class="grid cols-4 mb">
         ${kpi("Active projects", String(active.length), `${pj.length} total in portfolio`)}
         ${kpi("Known vacancies", String(vac.length), "revenue priority")}
-        ${kpi("Underwriting", `${uwDone}/${(state.uw || []).length}`, "models complete")}
+        ${kpi("Underwriting", `${uwDone}/${sshUw().length}`, "models complete")}
         ${kpi("Construction budget", piText("Pending Input"), "enter project budgets")}
       </div>
       <div class="grid cols-4 mb">
@@ -1371,8 +1382,8 @@ VIEWS.projects = {
 // ── 04 · Arrington Construction (7 units) ────────────────────────────────────
 VIEWS.arrington = {
   render() {
-    const units = (state.aunits || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-    const phases = (state.meta.find((m) => m.id === "ssh-config") || {}).arrPhases || [];
+    const units = sshUnits();
+    const phases = sshPhases();
     const rows = units.map((u) => [
       `<b>${esc(u.unit)}</b>`, piText(u.phase), esc(u.status || ""), piText(u.subs), piText(u.materialsNeeded),
       piText(u.budget), piText(u.actual), piText(u.committed), piText(u.remaining), u.blockers ? `<span style="color:var(--st-red)">${esc(u.blockers)}</span>` : `<span class="muted">—</span>`,
@@ -1407,7 +1418,7 @@ VIEWS.financial = {
 // ── 06 · Purchasing & Procurement ────────────────────────────────────────────
 VIEWS.procurement = {
   render() {
-    const rows = (state.procure || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map((r) => [
+    const rows = sshProcure().map((r) => [
       `${esc(r.project)}${r.unit ? `<div class="muted" style="font-size:10.5px">${esc(r.unit)}</div>` : ""}`, esc(r.type), piText(r.qty), piText(r.model), piText(r.vendor), piText(r.price), esc(r.status || ""), esc(r.delivery || "—"), esc(sshOwnerName(r.owner)),
     ]);
     return `<div class="view view-wide">
@@ -1423,7 +1434,7 @@ VIEWS.procurement = {
 // ── 07 · Leasing & Vacancies ─────────────────────────────────────────────────
 VIEWS.leasing = {
   render() {
-    const vac = (state.vacancies || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const vac = sshVac();
     const rows = vac.map((v) => [
       `<b>${esc(v.property)}</b><div class="muted" style="font-size:10.5px">${esc(v.unit)}</div>`, piText(v.condition), esc(v.rentReady), piText(v.targetRent), piText(v.askingRent), esc(v.listing), String(v.showings || 0), String(v.apps || 0), esc(v.leaseStatus), piText(v.daysVacant), piText(v.vacancyLoss),
     ]);
@@ -1440,7 +1451,7 @@ VIEWS.leasing = {
 // ── 08 · Underwriting ────────────────────────────────────────────────────────
 VIEWS.underwriting = {
   render() {
-    const uw = (state.uw || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const uw = sshUw();
     const rows = uw.map((u) => [`<b>${esc(u.name)}</b>`, esc(u.status), piText(u.noi), piText(u.capitalReq), piText(u.stabNoi), piText(u.addlCashflow), piText(u.coc), piText(u.completion)]);
     return `<div class="view view-wide">
       ${sshHead("08", "Underwriting", uw.length + " models · none fabricated")}
@@ -1468,7 +1479,7 @@ VIEWS.pipeline = {
 // ── 10 · Airbnb Operations ───────────────────────────────────────────────────
 VIEWS.airbnb = {
   render() {
-    const ho = (state.handoff || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const ho = sshHandoff();
     const hoRows = ho.map((h) => [esc(h.item), esc(h.status), esc(sshOwnerName(h.owner))]);
     return `<div class="view view-wide">
       ${sshHead("10", "Airbnb Operations", "two separate tracks")}
@@ -1488,7 +1499,7 @@ VIEWS.plan = {
     const qs = ["Which projects complete within 6 months?", "Which stay under construction?", "Units becoming rent-ready?", "Added monthly rental income?", "Added NOI?", "Construction capital required?", "Refinance-eligible projects?", "Expected refi proceeds?", "Projected monthly cash flow?", "Which projects get capital first?", "Biggest schedule risks?", "Expected position in 12 months?"];
     return `<div class="view view-wide">
       ${sshHead("11", "Six-Month / One-Year Plan", "Oct 2026 → Apr 2027 · Oct 2026 → Oct 2027")}
-      <div class="panel mb" style="border-color:var(--amber-line)"><div class="muted" style="font-size:12px">⚠️ This forecast is driven by the underwriting models — <b>${(state.uw || []).filter((u) => /complete/i.test(u.status)).length}/${(state.uw || []).length} complete</b>. Until underwriting is done, every figure below is <b>Pending Input</b>. No returns or completion dates are fabricated.</div></div>
+      <div class="panel mb" style="border-color:var(--amber-line)"><div class="muted" style="font-size:12px">⚠️ This forecast is driven by the underwriting models — <b>${sshUw().filter((u) => /complete/i.test(u.status)).length}/${sshUw().length} complete</b>. Until underwriting is done, every figure below is <b>Pending Input</b>. No returns or completion dates are fabricated.</div></div>
       <div class="dash-split">
         <div class="panel"><div class="panel-title"><span class="n">▸</span> 6-month (Oct '26 – Apr '27)</div><div class="mt">${qs.map((q) => `<div class="detail-row"><div class="n" style="font-size:12px">${esc(q)}</div><div class="a">${piText("Pending Input")}</div></div>`).join("")}</div></div>
         <div class="panel"><div class="panel-title"><span class="n">▸</span> 1-year (Oct '26 – Oct '27)</div><div class="mt">${qs.map((q) => `<div class="detail-row"><div class="n" style="font-size:12px">${esc(q)}</div><div class="a">${piText("Pending Input")}</div></div>`).join("")}</div></div>
