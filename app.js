@@ -1452,10 +1452,18 @@ VIEWS.leasing = {
 VIEWS.underwriting = {
   render() {
     const uw = sshUw();
-    const rows = uw.map((u) => [`<b>${esc(u.name)}</b>`, esc(u.status), piText(u.noi), piText(u.capitalReq), piText(u.stabNoi), piText(u.addlCashflow), piText(u.coc), piText(u.completion)]);
+    const done = uw.filter((u) => /complete/i.test(u.status));
+    const rows = uw.map((u) => [`<b>${esc(u.name)}</b>`, /complete/i.test(u.status) ? `<span style="color:var(--st-green,#6fbf8b);font-weight:700">${esc(u.status)}</span>` : esc(u.status), piText(u.noi), piText(u.capitalReq), piText(u.stabNoi), piText(u.addlCashflow), piText(u.coc), piText(u.completion)]);
+    const field = (k, v) => `<div class="detail-row"><div class="n" style="font-size:12px">${esc(k)}</div><div class="a" style="text-align:right">${piText(v)}</div></div>`;
+    const detail = (u) => `<details class="panel" style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:700">▸ ${esc(u.name)} — full model</summary><div class="dash-split" style="margin-top:10px">
+      <div>${field("Existing income", u.income)}${field("Operating expenses", u.opex)}${field("Current / stabilized NOI", u.noi)}${field("Reno cost", u.renoCost)}${field("Capital required", u.capitalReq)}${field("Stabilized rent", u.stabRent)}${field("Stabilized gross", u.stabGross)}${field("Stabilized opex", u.stabOpex)}</div>
+      <div>${field("Stabilized NOI", u.stabNoi)}${field("Added cash flow", u.addlCashflow)}${field("Debt", u.debt)}${field("Refi proceeds", u.refiProceeds)}${field("Projected equity", u.equity)}${field("Return (CoC/IRR)", u.coc)}${field("Completion", u.completion)}${field("Stabilization", u.stabilization)}</div>
+      </div>${u.assumptions ? `<div class="muted" style="font-size:11.5px;margin-top:8px;border-top:1px solid var(--line-soft,#8881);padding-top:8px"><b>Assumptions:</b> ${esc(u.assumptions)}</div>` : ""}</details>`;
     return `<div class="view view-wide">
-      ${sshHead("08", "Underwriting", uw.length + " models · none fabricated")}
-      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Underwriting tracker</div><div class="mt">${sshTable(["Property", "Status", "Current NOI", "Capital req.", "Stabilized NOI", "Added cash flow", "CoC", "Completion"], rows)}</div><div class="muted mt" style="font-size:11px">Each model also needs: existing income, opex, reno cost, stabilized rents/gross, debt, refi proceeds, projected equity, assumptions & risks. All Pending Input — unverified assumptions are never shown as confirmed. Once complete, these feed the 6-month / 1-year plan.</div></div>
+      ${sshHead("08", "Underwriting", `${done.length}/${uw.length} complete · figures from your model, none fabricated`)}
+      <div class="panel mb"><div class="panel-title"><span class="n">▸</span> Underwriting tracker</div><div class="mt">${sshTable(["Property", "Status", "NOI", "Capital req.", "Stabilized NOI", "Added cash flow", "Return", "Completion"], rows)}</div></div>
+      ${done.length ? `<div class="mb"><div class="mono muted" style="font-size:10px;letter-spacing:1px;margin-bottom:8px">COMPLETED MODELS — full detail (from underwriting workbook)</div>${done.map(detail).join("")}</div>` : ""}
+      <div class="muted mb" style="font-size:11px">Not-started models (Arrington, Washington, Painter, Spry, Seal Beach) show Pending Input — unverified assumptions are never shown as confirmed. All 7 complete unlocks the 6-month / 1-year plan.</div>
       <div class="panel"><div class="panel-title"><span class="n">▸</span> Underwriting tasks</div><div class="mt">${sshList(sshBySection("underwriting"), "No open underwriting tasks.")}</div></div>
     </div>`;
   },

@@ -958,8 +958,9 @@ export const SSH_PROJECTS = [
     next: "Establish unit-by-unit renovation tracking", blocker: "", order: 1,
     note: "Alex is acting GC/PM — first independent renovation of this size.", budget: PI, spent: PI, committed: PI },
   { id: "pj-firvale", name: "Firvale", propertyId: "prop-firvale", priority: "High", owner: "p-alex",
-    status: "Active construction", phase: "Demolition", units: 1,
-    next: "Sat Oct 24 — demo one unit + remove debris", blocker: "", order: 2, budget: PI, spent: PI, committed: PI },
+    status: "Active construction — demo (flip)", phase: "Demolition", units: 1,
+    next: "Sat Oct 24 — demo one unit + remove debris", blocker: "", order: 2,
+    note: "Flip · Harbor Coast Construction · underwriting complete (27.7% annualized ROI)", budget: "$71,500 (contract)", spent: "$0", committed: "$71,500" },
   { id: "pj-sealbeach", name: "Seal Beach", propertyId: "prop-140-12th", priority: "Urgent", owner: "p-alex",
     status: "Entitlement + tenant notices", phase: "Architect plans → city; move-out notices",
     next: "Architect: finalize plans + submit to city · issue lawful tenant move-out notices (URGENT)",
@@ -972,8 +973,9 @@ export const SSH_PROJECTS = [
     next: "Get Hector's weekly report · underwrite", blocker: "", order: 5,
     note: "Hector manages execution; Alex = oversight + approvals.", budget: PI, spent: PI, committed: PI },
   { id: "pj-inglewood", name: "Inglewood", propertyId: "prop-inglewood", priority: "Medium", owner: "p-hector",
-    status: "Active renovation (Hector) + NEW Airbnb setup", phase: "Renovation + Airbnb build-out",
-    next: "Track Hector's progress · set up the new Inglewood Airbnb", blocker: "", order: 6, budget: PI, spent: PI, committed: PI },
+    status: "Reno ~90% (finish past due 10/12) + NEW Airbnb setup", phase: "Completion phase + Airbnb build-out", units: 4,
+    next: "Get revised finish date + lien releases · pay final $22,100 · set up new Airbnb", blocker: "Est. finish 10/12 has passed — need revised date", order: 6,
+    note: "Harbor Coast · underwriting complete · $152,837 under budget vs CapEx", budget: "$221,000 (contract)", spent: "$198,900", committed: "$22,100" },
   { id: "pj-spry", name: "Spry", propertyId: "prop-spry", priority: "Medium", owner: "p-camilla",
     status: "Planning / architectural", phase: "Architect plans (Camilla)",
     next: "Contact Camilla — confirm plan completion date · underwrite", blocker: "Waiting on Camilla's plans", order: 7, budget: PI, spent: PI, committed: PI },
@@ -993,12 +995,27 @@ export const SSH_VACANCIES = [
   { id: "vac-bway-1", property: "Broadway", propertyId: "prop-broadway", unit: "Unit — TBD", condition: PI, rentReady: "No", turnover: PI, targetRent: PI, askingRent: PI, listing: "Not listed", showings: 0, apps: 0, approved: "", leaseStatus: "Not Started", moveIn: "", daysVacant: PI, vacancyLoss: PI, order: 4 },
 ];
 export const SSH_UW = [
-  { id: "uw-arrington", name: "Arrington", projectId: "pj-arrington", status: "Not Started", order: 1 },
-  { id: "uw-washington", name: "Washington", projectId: "pj-washington", status: "Not Started", order: 2 },
-  { id: "uw-spry", name: "Spry", projectId: "pj-spry", status: "Not Started", order: 3 },
-  { id: "uw-painter", name: "Painter", projectId: "pj-painter", status: "Not Started", order: 4 },
-  { id: "uw-fifth", name: "Fifth property — pending identification", projectId: "", status: "Identify property", order: 5 },
-].map((u) => ({ ...u, income: PI, opex: PI, noi: PI, renoCost: PI, capitalReq: PI, stabRent: PI, stabGross: PI, stabOpex: PI, stabNoi: PI, addlCashflow: PI, completion: PI, stabilization: PI, debt: PI, refiProceeds: PI, equity: PI, coc: PI, assumptions: "" }));
+  { id: "uw-inglewood", name: "Inglewood", projectId: "pj-inglewood", status: "Complete", order: 1,
+    income: "$0 in-place (vacant) → $11,580/mo market", opex: "~$2,650/mo", noi: "Stabilized $100,214/yr",
+    renoCost: "$373,837 budget · $221,000 contract", capitalReq: "$1,487,837 all-in ($371,959/unit)",
+    stabRent: "$11,580/mo", stabGross: "$138,960/yr", stabOpex: "~$31,798/yr", stabNoi: "$100,214/yr (→ $141,782 w/ ADUs)",
+    addlCashflow: "+$3,600/mo from 2 ADUs", completion: "Reno ~90% (est. finish past due 10/12)", stabilization: "Year 1",
+    debt: "Refi #1 $975,000 @ 7.25%, 30yr", refiProceeds: "$970k (refi #1) + $379k (refi #2)",
+    equity: "$450k (refi) / $834k (cash) after ADUs", coc: "5-yr IRR 14.4% · EM 1.42x · min DSCR 1.26",
+    assumptions: "4 units + 2 ADUs @ $145k; cap 7.46%; appraisal $1.3M → $1.8M" },
+  { id: "uw-firvale", name: "Firvale (flip)", projectId: "pj-firvale", status: "Complete", order: 2,
+    income: "Flip — no rental hold", opex: "Holding $580/mo", noi: "n/a (flip)",
+    renoCost: "$71,500 (Harbor Coast contract)", capitalReq: "$363,000 purchase + closing",
+    stabRent: "n/a", stabGross: "n/a", stabOpex: "n/a", stabNoi: "n/a",
+    addlCashflow: "Resale comps $448k–$528k", completion: "Reno in progress · est. finish ~Nov 2026", stabilization: "On sale",
+    debt: "n/a (cash)", refiProceeds: "n/a", equity: "n/a",
+    coc: "Annualized ROI 27.7%", assumptions: "Flip · selling costs $21,547 · holding $580/mo" },
+  { id: "uw-arrington", name: "Arrington", projectId: "pj-arrington", status: "Not Started", order: 3 },
+  { id: "uw-washington", name: "Washington", projectId: "pj-washington", status: "Not Started", order: 4 },
+  { id: "uw-painter", name: "Painter", projectId: "pj-painter", status: "Not Started", order: 5 },
+  { id: "uw-spry", name: "Spry", projectId: "pj-spry", status: "Not Started", order: 6 },
+  { id: "uw-sealbeach", name: "Seal Beach", projectId: "pj-sealbeach", status: "Not Started", order: 7 },
+].map((u) => ({ income: PI, opex: PI, noi: PI, renoCost: PI, capitalReq: PI, stabRent: PI, stabGross: PI, stabOpex: PI, stabNoi: PI, addlCashflow: PI, completion: PI, stabilization: PI, debt: PI, refiProceeds: PI, equity: PI, coc: PI, assumptions: "", ...u }));
 export const SSH_PROCURE = [
   { id: "pr-arr-fridge", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Refrigerator", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 1 },
   { id: "pr-arr-stove", project: "Arrington", projectId: "pj-arrington", unit: "All 7 — confirm per unit", type: "Stove / range", qty: "7 (confirm)", dims: PI, model: PI, vendor: PI, price: PI, status: "Not ordered", delivery: "", install: "", owner: "p-alex", order: 2 },
@@ -1056,21 +1073,25 @@ const SSH_TASKS = [
   sshTask({ id: "t-doorloop", title: "Implement DoorLoop (lowest priority — backlog only)", prio: "low", section: "admin" }),
 ];
 export async function applySSHReset() {
-  if (localStorage.getItem("sshcc:ssh-reset-v1")) return;
+  if (localStorage.getItem("sshcc:ssh-reset-v2")) return;
   // Archive (not delete) the old planner layer: clear os-* tasks + weekplan so
   // the active board shows only the new system. All other data is preserved.
   for (const t of DB.getAll("tasks")) { if (typeof t.id === "string" && t.id.startsWith("os-")) await DB.remove("tasks", t.id); }
   const wp = DB.getAll("meta").find((m) => m.id === "weekplan"); if (wp) await DB.remove("meta", "weekplan");
+  // Reference data (projects, units, underwriting, etc.) is force-refreshed from
+  // the current source of truth so devices that ran v1 pick up the real figures.
+  const setCol = async (col, rows) => { for (const r of rows) await DB.upsert(col, r); };
+  // Tasks are seed-if-absent so completed/edited state is preserved.
   const seedCol = async (col, rows) => { const ex = DB.getAll(col); for (const r of rows) if (!ex.some((x) => x.id === r.id)) await DB.upsert(col, r); };
-  await seedCol("people", SSH_PEOPLE);
-  await seedCol("projects", SSH_PROJECTS);
-  await seedCol("aunits", SSH_AUNITS);
-  await seedCol("vacancies", SSH_VACANCIES);
-  await seedCol("uw", SSH_UW);
-  await seedCol("procure", SSH_PROCURE);
-  await seedCol("handoff", SSH_HANDOFF);
+  await setCol("people", SSH_PEOPLE);
+  await setCol("projects", SSH_PROJECTS);
+  await setCol("aunits", SSH_AUNITS);
+  await setCol("vacancies", SSH_VACANCIES);
+  await setCol("uw", SSH_UW);
+  await setCol("procure", SSH_PROCURE);
+  await setCol("handoff", SSH_HANDOFF);
   await seedCol("tasks", SSH_TASKS);
   await DB.upsert("meta", { id: "ssh-config", arrPhases: ARR_PHASES, resetAt: "2026-10-22" });
-  localStorage.setItem("sshcc:ssh-reset-v1", "1");
-  console.log("SSH operating-system rebuild loaded.");
+  localStorage.setItem("sshcc:ssh-reset-v2", "1");
+  console.log("SSH operating-system rebuild loaded (v2 — Inglewood + Firvale underwriting).");
 }
