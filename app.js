@@ -1545,13 +1545,11 @@ const AM = [{ t: "7:30a", d: "Wake", k: "wake" }, { t: "7:45a", e: "8:30a", d: "
 const PM = [{ t: "5:30p", e: "6:00p", d: "Meatball PM walk", k: "dog" }, { t: "6:00p", e: "7:00p", d: "Workout", k: "workout" }, { t: "7:00p", e: "7:45p", d: "Dinner", k: "meal" }, { t: "9:00p", e: "9:30p", d: "Read 30 min", k: "read" }, { t: "10:30p", d: "Bed", k: "sleep" }];
 const wkday = (date, theme, work) => ({ date, theme, sched: [...AM, ...work, ...PM] });
 const SSH_SCHEDULE = [
-  { date: "2026-10-26", theme: "Build-out + 11am showing · contractor decision", sched: [
+  { date: "2026-10-26", theme: "Build-out · contractor decision", sched: [
     { t: "7:30a", d: "Wake", k: "wake" },
     { t: "7:45a", e: "8:45a", d: "Meatball — 1 hour out (run + park)", k: "dog" },
     { t: "8:45a", e: "9:00a", d: "Prep", k: "self" },
-    { t: "9:00a", e: "10:45a", d: "Build out Arrington — underwriting / model", k: "deep" },
-    { t: "10:45a", e: "11:00a", d: "Drive to showing", k: "self" },
-    { t: "11:00a", e: "12:00p", d: "Property showing", k: "appt" },
+    { t: "9:00a", e: "12:00p", d: "Build out Arrington — underwriting / model", k: "deep" },
     { t: "12:00p", e: "12:45p", d: "Lunch", k: "meal" },
     { t: "12:45p", e: "1:15p", d: "DECIDE: Hector vs Kiki — Arrington contractor", k: "review" },
     { t: "1:15p", e: "1:30p", d: "Send Seal Beach the plans / paperwork", k: "ops" },
