@@ -1559,12 +1559,21 @@ const SSH_SCHEDULE = [
     { t: "7:00p", e: "7:45p", d: "Dinner", k: "meal" },
     { t: "9:00p", e: "9:30p", d: "Read 30 min", k: "read" },
     { t: "10:30p", d: "Bed", k: "sleep" }] },
-  wkday("2026-10-27", "Construction / field — Arrington GC + build-out", [
+  { date: "2026-10-27", theme: "Construction / field · grocery + cook", sched: [
+    { t: "7:30a", d: "Wake", k: "wake" },
+    { t: "7:45a", e: "8:30a", d: "Meatball — cardio run", k: "dog" },
+    { t: "8:30a", e: "9:00a", d: "Breakfast · prep", k: "self" },
     { t: "9:00a", e: "12:00p", d: "Arrington site — unit-by-unit tracking, walk all 7", k: "ops" },
     { t: "12:00p", e: "1:00p", d: "Lunch + Meatball", k: "meal" },
     { t: "1:00p", e: "3:00p", d: "Finish Painter + Inglewood build-out (if not done Mon)", k: "deep" },
     { t: "3:00p", e: "4:00p", d: "Firvale — construction check + next milestone", k: "ops" },
-    { t: "4:00p", e: "5:00p", d: "Appliances — identify per Arrington unit (bulk)", k: "admin" }]),
+    { t: "4:00p", e: "4:45p", d: "Appliances — identify per Arrington unit (bulk)", k: "admin" },
+    { t: "5:00p", e: "6:00p", d: "Grocery store", k: "self" },
+    { t: "6:00p", e: "6:30p", d: "Meatball PM walk", k: "dog" },
+    { t: "6:30p", e: "8:00p", d: "Cook / meal prep for the week", k: "self" },
+    { t: "8:00p", e: "8:30p", d: "Dinner", k: "meal" },
+    { t: "9:00p", e: "9:30p", d: "Read 30 min", k: "read" },
+    { t: "10:30p", d: "Bed", k: "sleep" }] },
   wkday("2026-10-28", "Seal Beach entitlement + underwriting", [
     { t: "9:00a", e: "10:30a", d: "Seal Beach — architect: plans → city submission (URGENT)", k: "appt" },
     { t: "10:30a", e: "11:30a", d: "Seal Beach — tenant move-out notices (lawful grounds/timing)", k: "ops" },
