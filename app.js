@@ -1586,13 +1586,12 @@ const SSH_SCHEDULE = [
     { t: "12:00p", e: "1:00p", d: "Lunch + Meatball", k: "meal" },
     { t: "1:00p", e: "2:30p", d: "Weekly CEO review → next week's Big 3", k: "review" },
     { t: "2:30p", e: "4:00p", d: "Catch-up / overflow", k: "ops" }]),
-  { date: "2026-10-31", theme: "Meatball to Pierce's · golf tonight", sched: [
+  { date: "2026-10-31", theme: "Meatball to babysitter · Pierce over 8pm", sched: [
     { t: "8:00a", d: "Wake", k: "wake" }, { t: "8:15a", e: "9:00a", d: "Meatball walk", k: "dog" },
-    { t: "9:00a", e: "9:30a", d: "Drop off Meatball at Pierce's", k: "appt" },
+    { t: "9:00a", e: "9:30a", d: "Drop off Meatball at babysitter", k: "appt" },
     { t: "10:00a", e: "11:00a", d: "Gym", k: "workout" },
     { t: "11:30a", e: "2:30p", d: "Focused work overflow (Arrington / build-out)", k: "ops" },
-    { t: "5:00p", e: "9:00p", d: "Golf with Pierce ⛳", k: "appt" },
-    { t: "9:30p", e: "10:00p", d: "Read", k: "read" }] },
+    { t: "8:00p", e: "11:00p", d: "Pierce over at my house", k: "appt" }] },
   { date: "2026-11-01", theme: "Reset — meal prep, plan next week", sched: [
     { t: "8:00a", d: "Wake", k: "wake" }, { t: "8:15a", e: "9:00a", d: "Pick up / walk Meatball", k: "dog" },
     { t: "9:00a", e: "10:00a", d: "Gym", k: "workout" }, { t: "10:30a", e: "12:00p", d: "Meal prep", k: "ops" },
