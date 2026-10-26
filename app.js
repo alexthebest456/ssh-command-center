@@ -135,6 +135,7 @@ function renderField(f, val) {
 // tucked under "More" so the sidebar is calm, not a wall of 19 options.
 const NAV_ESSENTIALS = [
   { id: "daily", label: "🎯 Daily Command" },
+  { id: "schedule", label: "📅 Schedule" },
   { id: "exec", label: "📊 Executive Overview" },
   { id: "projects", label: "🏗 Master Projects" },
   { id: "arrington", label: "🔨 Arrington · 7 units" },
@@ -1529,6 +1530,146 @@ VIEWS.admin = {
     </div>`;
   },
   mount(root) { sshMount(root); },
+};
+
+// ── SSH · Schedule (time-blocked week + iPhone calendar export) ──────────────
+// Lives in code so it always renders (no sync dependency). Tell me your week and
+// I update this; the .ics export and the subscribed calendar feed both read it.
+const SCH_KIND = {
+  deep: ["🎯", "var(--amber,#e0913a)"], ops: ["🔧", "var(--st-blue,#7fa8d1)"], admin: ["✉️", "var(--dash-faint,#8a8a8a)"],
+  review: ["📋", "var(--st-blue,#7fa8d1)"], appt: ["📅", "var(--st-red,#e0685f)"], meal: ["🍽", "var(--dash-faint,#8a8a8a)"],
+  dog: ["🐕", "var(--st-green,#6fbf8b)"], workout: ["💪", "var(--st-green,#6fbf8b)"], read: ["📖", "var(--dash-faint,#8a8a8a)"],
+  self: ["🚿", "var(--dash-faint,#8a8a8a)"], wake: ["⏰", "var(--dash-faint,#8a8a8a)"], sleep: ["🌙", "var(--dash-faint,#8a8a8a)"],
+};
+const AM = [{ t: "7:30a", d: "Wake", k: "wake" }, { t: "7:45a", e: "8:30a", d: "Meatball — cardio run", k: "dog" }, { t: "8:30a", e: "9:00a", d: "Breakfast · prep", k: "self" }];
+const PM = [{ t: "5:30p", e: "6:00p", d: "Meatball PM walk", k: "dog" }, { t: "6:00p", e: "7:00p", d: "Workout", k: "workout" }, { t: "7:00p", e: "7:45p", d: "Dinner", k: "meal" }, { t: "9:00p", e: "9:30p", d: "Read 30 min", k: "read" }, { t: "10:30p", d: "Bed", k: "sleep" }];
+const wkday = (date, theme, work) => ({ date, theme, sched: [...AM, ...work, ...PM] });
+const SSH_SCHEDULE = [
+  { date: "2026-10-26", theme: "Build-out + 11am showing · contractor decision", sched: [
+    { t: "7:30a", d: "Wake", k: "wake" },
+    { t: "7:45a", e: "8:45a", d: "Meatball — 1 hour out (run + park)", k: "dog" },
+    { t: "8:45a", e: "9:00a", d: "Prep", k: "self" },
+    { t: "9:00a", e: "10:45a", d: "Build out Arrington — underwriting / model", k: "deep" },
+    { t: "10:45a", e: "11:00a", d: "Drive to showing", k: "self" },
+    { t: "11:00a", e: "12:00p", d: "Property showing", k: "appt" },
+    { t: "12:00p", e: "12:45p", d: "Lunch", k: "meal" },
+    { t: "12:45p", e: "1:15p", d: "DECIDE: Hector vs Kiki — Arrington contractor", k: "review" },
+    { t: "1:15p", e: "1:30p", d: "Send Seal Beach the plans / paperwork", k: "ops" },
+    { t: "1:30p", e: "3:30p", d: "Build out Painter + Inglewood — underwriting", k: "deep" },
+    { t: "3:30p", e: "6:00p", d: "Gym (25m drive · 1.5h · 25m back)", k: "workout" },
+    { t: "6:00p", e: "6:30p", d: "Meatball PM walk", k: "dog" },
+    { t: "7:00p", e: "7:45p", d: "Dinner", k: "meal" },
+    { t: "9:00p", e: "9:30p", d: "Read 30 min", k: "read" },
+    { t: "10:30p", d: "Bed", k: "sleep" }] },
+  wkday("2026-10-27", "Construction / field — Arrington GC + build-out", [
+    { t: "9:00a", e: "12:00p", d: "Arrington site — unit-by-unit tracking, walk all 7", k: "ops" },
+    { t: "12:00p", e: "1:00p", d: "Lunch + Meatball", k: "meal" },
+    { t: "1:00p", e: "3:00p", d: "Finish Painter + Inglewood build-out (if not done Mon)", k: "deep" },
+    { t: "3:00p", e: "4:00p", d: "Firvale — construction check + next milestone", k: "ops" },
+    { t: "4:00p", e: "5:00p", d: "Appliances — identify per Arrington unit (bulk)", k: "admin" }]),
+  wkday("2026-10-28", "Seal Beach entitlement + underwriting", [
+    { t: "9:00a", e: "10:30a", d: "Seal Beach — architect: plans → city submission (URGENT)", k: "appt" },
+    { t: "10:30a", e: "11:30a", d: "Seal Beach — tenant move-out notices (lawful grounds/timing)", k: "ops" },
+    { t: "11:30a", e: "12:30p", d: "Washington underwriting", k: "deep" },
+    { t: "12:30p", e: "1:15p", d: "Lunch + Meatball", k: "meal" },
+    { t: "1:15p", e: "3:30p", d: "Washington underwriting + landscaping/pergola follow-up", k: "deep" },
+    { t: "3:30p", e: "5:00p", d: "Vacancies — check the 4 units, leasing status", k: "ops" }]),
+  wkday("2026-10-29", "Property management / leasing", [
+    { t: "9:00a", e: "11:00a", d: "Painter & Spry underwriting", k: "deep" },
+    { t: "11:00a", e: "12:00p", d: "Spry — contact Camilla (plan completion date)", k: "ops" },
+    { t: "12:00p", e: "1:00p", d: "Lunch + Meatball", k: "meal" },
+    { t: "1:00p", e: "3:00p", d: "Leasing push — list + show vacant units", k: "ops" },
+    { t: "3:00p", e: "5:00p", d: "Inglewood Airbnb — furniture list + setup plan", k: "ops" }]),
+  wkday("2026-10-30", "Airbnb handoff + CEO review", [
+    { t: "9:00a", e: "10:30a", d: "Meet Juan — existing Airbnb handoff", k: "appt" },
+    { t: "10:30a", e: "12:00p", d: "Organize 2026 tax records (start)", k: "admin" },
+    { t: "12:00p", e: "1:00p", d: "Lunch + Meatball", k: "meal" },
+    { t: "1:00p", e: "2:30p", d: "Weekly CEO review → next week's Big 3", k: "review" },
+    { t: "2:30p", e: "4:00p", d: "Catch-up / overflow", k: "ops" }]),
+  { date: "2026-10-31", theme: "Meatball to Pierce's · golf tonight", sched: [
+    { t: "8:00a", d: "Wake", k: "wake" }, { t: "8:15a", e: "9:00a", d: "Meatball walk", k: "dog" },
+    { t: "9:00a", e: "9:30a", d: "Drop off Meatball at Pierce's", k: "appt" },
+    { t: "10:00a", e: "11:00a", d: "Gym", k: "workout" },
+    { t: "11:30a", e: "2:30p", d: "Focused work overflow (Arrington / build-out)", k: "ops" },
+    { t: "5:00p", e: "9:00p", d: "Golf with Pierce ⛳", k: "appt" },
+    { t: "9:30p", e: "10:00p", d: "Read", k: "read" }] },
+  { date: "2026-11-01", theme: "Reset — meal prep, plan next week", sched: [
+    { t: "8:00a", d: "Wake", k: "wake" }, { t: "8:15a", e: "9:00a", d: "Pick up / walk Meatball", k: "dog" },
+    { t: "9:00a", e: "10:00a", d: "Gym", k: "workout" }, { t: "10:30a", e: "12:00p", d: "Meal prep", k: "ops" },
+    { t: "12:00p", e: "1:00p", d: "Laundry / home reset", k: "self" }, { t: "1:00p", e: "2:30p", d: "Weekly review + plan next week", k: "review" },
+    { t: "5:30p", e: "6:00p", d: "Meatball PM", k: "dog" }, { t: "9:00p", e: "9:30p", d: "Read 30 min", k: "read" }] },
+];
+// "9:00a" / "12:30p" / "10:30p" → {h,m} 24-hour.
+function parseClock(s) {
+  const m = /^(\d+):(\d+)\s*([ap])$/.exec(s.trim().toLowerCase()); if (!m) return null;
+  let h = +m[1]; const min = +m[2]; if (m[3] === "p" && h !== 12) h += 12; if (m[3] === "a" && h === 12) h = 0;
+  return { h, m: min };
+}
+function schICS() {
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//SSH//Schedule//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:SSH Schedule", "X-WR-TIMEZONE:America/Los_Angeles"];
+  for (const day of SSH_SCHEDULE) {
+    const [Y, Mo, D] = day.date.split("-").map(Number);
+    for (let i = 0; i < day.sched.length; i++) {
+      const b = day.sched[i]; const st = parseClock(b.t); if (!st) continue;
+      const en = b.e ? parseClock(b.e) : { h: st.h, m: st.m + 15 };
+      const dstart = `${Y}${pad(Mo)}${pad(D)}T${pad(st.h)}${pad(st.m)}00`;
+      const dend = `${Y}${pad(Mo)}${pad(D)}T${pad(Math.min(23, en.h))}${pad(en.m % 60)}00`;
+      const ic = (SCH_KIND[b.k] || [""])[0];
+      lines.push("BEGIN:VEVENT", `UID:ssh-${day.date}-${i}@sshouzzes`, `DTSTAMP:${stamp}`,
+        `DTSTART:${dstart}`, `DTEND:${dend}`, `SUMMARY:${(ic ? ic + " " : "") + b.d.replace(/[,;\\]/g, " ")}`, "END:VEVENT");
+    }
+  }
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+try { if (typeof window !== "undefined") window.__schICS = schICS; } catch {}
+VIEWS.schedule = {
+  render() {
+    const tIso = todayISO();
+    const agenda = (sched) => sched.map((b) => {
+      const [ic, c] = SCH_KIND[b.k] || ["•", "var(--muted,#888)"];
+      return `<div class="flex" style="gap:10px;align-items:stretch;padding:5px 0;border-top:1px solid var(--line-soft,#8881)">
+        <div class="mono muted" style="width:104px;flex:0 0 auto;font-size:11px;text-align:right;padding-top:2px">${esc(b.t)}${b.e ? `–${esc(b.e)}` : ""}</div>
+        <div style="width:3px;background:${c};border-radius:2px;flex:0 0 auto"></div>
+        <div style="flex:1;min-width:0;font-size:13px;padding-top:1px">${ic} ${esc(b.d)}</div></div>`;
+    }).join("");
+    const dayCard = (d) => {
+      const dt = parseISO(d.date); const isToday = d.date === tIso;
+      const dow = dt.toLocaleDateString("en-US", { weekday: "long" });
+      return `<div class="panel" style="${isToday ? "border:1.5px solid var(--amber-line);background:var(--amber-soft)" : ""}">
+        <div class="flex between" style="align-items:baseline"><div style="font-weight:800;font-size:15px">${esc(dow)} <span class="muted" style="font-weight:500">${dt.getMonth() + 1}/${dt.getDate()}</span></div>${isToday ? `<span class="tag amber" style="font-size:9px">TODAY</span>` : ""}</div>
+        <div class="mono muted" style="font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;margin:4px 0 6px">${esc(d.theme)}</div>
+        ${agenda(d.sched)}</div>`;
+    };
+    return `<div class="view view-wide">
+      ${sshHead("Schedule", "This Week — Time-Blocked", fmtLong(todayDate()))}
+      <div class="panel mb" style="border:1.5px solid var(--brass-line,#c8a86b55)">
+        <div class="flex between wrap" style="gap:10px;align-items:center">
+          <div><div style="font-weight:700">📲 Put this on your iPhone</div><div class="muted" style="font-size:12px;margin-top:2px">Tap to download the week, then open it — iOS will offer "Add All to Calendar." Or subscribe to the live feed (auto-updates) — see below.</div></div>
+          <button class="btn primary" data-ics>📅 Add to iPhone Calendar</button>
+        </div>
+        <details style="margin-top:10px"><summary class="muted" style="cursor:pointer;font-size:12px">▸ Subscribe to the live calendar (auto-updates)</summary>
+          <div class="muted" style="font-size:12px;margin-top:6px;line-height:1.6">On your iPhone: <b>Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar</b>, then paste:<br><span class="mono" style="font-size:11px;color:var(--brass,#c8a86b)">https://alexthebest456.github.io/ssh-command-center/calendar.ics</span><br>It shows as its own calendar and refreshes automatically whenever your week is updated.</div></details>
+      </div>
+      <div class="dash-split">${SSH_SCHEDULE.slice(0, 4).map(dayCard).join("")}</div>
+      <div class="dash-split" style="margin-top:14px">${SSH_SCHEDULE.slice(4).map(dayCard).join("")}</div>
+      <div class="mono muted" style="font-size:10.5px;margin-top:14px">Tell me any time change and I'll update the schedule and the calendar feed.</div>
+    </div>`;
+  },
+  mount(root) {
+    root.querySelectorAll("[data-nav]").forEach((el) => el.addEventListener("click", () => go(el.dataset.nav)));
+    const b = root.querySelector("[data-ics]");
+    if (b) b.addEventListener("click", () => {
+      try {
+        const blob = new Blob([schICS()], { type: "text/calendar;charset=utf-8" });
+        const url = URL.createObjectURL(blob); const a = document.createElement("a");
+        a.href = url; a.download = "ssh-week.ics"; document.body.appendChild(a); a.click();
+        setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 2000); toast("Calendar downloaded — open it to add to iPhone");
+      } catch (e) { toast("Export failed — try again"); }
+    });
+  },
 };
 
 VIEWS.command = {
